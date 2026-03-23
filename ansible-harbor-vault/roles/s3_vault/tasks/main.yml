@@ -1,0 +1,17 @@
+---
+- amazon.aws.s3_bucket:
+    name: "{{ vault_bucket_name }}"
+    region: "{{ aws_region }}"
+    state: present
+    versioning: true
+    object_lock_enabled: true
+    object_lock_default_retention:
+      mode: COMPLIANCE
+      years: "{{ vault_retention_years | int }}"
+    public_access:
+      block_public_acls: true
+      block_public_policy: true
+      ignore_public_acls: true
+      restrict_public_buckets: true
+    encryption: aws:kms
+    encryption_key_id: "{{ vault_kms_key_arn }}"

@@ -1,0 +1,10 @@
+---
+- amazon.aws.kms_key:
+    alias: "{{ kms_alias }}"
+    description: Sheltered Harbor vault CMK
+    region: "{{ aws_region }}"
+    state: present
+  register: kms_key
+
+- ansible.builtin.set_fact:
+    vault_kms_key_arn: "{{ kms_key.key_arn }}"

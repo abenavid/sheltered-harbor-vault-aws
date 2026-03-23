@@ -1,0 +1,48 @@
+---
+- hosts: localhost
+  gather_facts: false
+  pre_tasks:
+    - name: Load ansible-harbor-vault/.env
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json, os, pathlib
+        p = pathlib.Path(os.environ["ENV_FILE"])
+        d = {}
+        for line in p.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            k, _, v = line.partition("=")
+            if k:
+                d[k.strip()] = v.strip().strip('"').strip("'")
+        print(json.dumps(d))
+        PY
+      environment:
+        ENV_FILE: "{{ playbook_dir }}/../.env"
+      register: env_json
+      changed_when: false
+      no_log: true
+
+    - name: Apply .env to facts
+      ansible.builtin.set_fact:
+        vault_dotenv: "{{ env_json.stdout | from_json }}"
+      no_log: true
+
+    - name: Prefer AWS_DEFAULT_REGION from .env
+      ansible.builtin.set_fact:
+        aws_region: "{{ vault_dotenv.AWS_DEFAULT_REGION | default(aws_region) }}"
+
+  tasks:
+    - name: Bootstrap vault
+      block:
+        - ansible.builtin.include_role:
+            name: kms
+        - ansible.builtin.include_role:
+            name: s3_vault
+        - ansible.builtin.include_role:
+            name: iam_writer
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ vault_dotenv.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "{{ vault_dotenv.AWS_SECRET_ACCESS_KEY }}"
+        AWS_SESSION_TOKEN: "{{ vault_dotenv.AWS_SESSION_TOKEN | default('') }}"
+        AWS_DEFAULT_REGION: "{{ aws_region }}"
