@@ -4,6 +4,8 @@ This repository automates a minimal **Sheltered Harbor–aligned data vault** on
 
 The article frames three themes—**secure and immutable vault**, **air-gapped / isolated environment**, and **forensic scanning**—mapped below to what this codebase does and does not provision.
 
+![AWS architecture diagram: secure data pipeline with Ingress, Analytics, Vault, Forensics, and Egress zones; data flows from ingestion to recovery via Direct Connect; Management Interface zone; shared services IAM, KMS, CloudWatch, CloudTrail, Macie, GuardDuty, and SNS.](docs/assets/sheltered-harbor-vault-architecture.png)
+
 ## How this maps to the reference architecture
 
 ### Secure and immutable data vault
