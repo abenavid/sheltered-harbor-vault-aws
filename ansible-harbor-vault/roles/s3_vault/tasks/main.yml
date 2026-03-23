@@ -15,3 +15,18 @@
       restrict_public_buckets: true
     encryption: aws:kms
     encryption_key_id: "{{ vault_kms_key_arn }}"
+    policy: "{{ vault_bucket_tls_policy | to_json }}"
+  vars:
+    vault_bucket_tls_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: DenyInsecureTransport
+          Effect: Deny
+          Principal: "*"
+          Action: "s3:*"
+          Resource:
+            - "arn:aws:s3:::{{ vault_bucket_name }}"
+            - "arn:aws:s3:::{{ vault_bucket_name }}/*"
+          Condition:
+            Bool:
+              "aws:SecureTransport": "false"

@@ -1,0 +1,19 @@
+---
+# Enable via vault_forensic_scanning_enabled in inventories/group_vars/all.yml (playbook include).
+# GuardDuty Malware Protection for S3 (independent of full GuardDuty detector). See:
+# https://docs.aws.amazon.com/guardduty/latest/ug/enable-malware-protection-s3-bucket.html
+vault_guardduty_malware_role_name: GuardDutyVaultS3MalwareScanRole
+# Post-scan object tag GuardDutyMalwareScanStatus (standard S3 tagging charges apply)
+vault_guardduty_s3_tagging_enabled: true
+# Up to five prefixes; empty list = scan all new objects in the bucket
+vault_guardduty_s3_scan_prefixes: []
+
+# Optional: send "GuardDuty Malware Protection Object Scan Result" to an SNS topic (partner / SOAR hook).
+# Uses a dedicated topic if possible — the playbook sets a topic policy that replaces the existing policy.
+vault_forensic_scan_sns_topic_arn: ""
+
+# Optional: third-party scanner — role assumable by this principal for read-only vault access (GetObject + decrypt)
+vault_partner_scanner_enabled: false
+vault_partner_scanner_role_name: VaultPartnerScannerRole
+# e.g. arn:aws:iam::999999999999:root or arn:aws:iam::999999999999:role/ExternalScanner
+vault_partner_scanner_principal: ""

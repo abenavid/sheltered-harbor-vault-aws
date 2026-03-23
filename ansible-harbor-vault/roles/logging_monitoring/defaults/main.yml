@@ -1,0 +1,20 @@
+---
+# Enable via vault_logging_monitoring_enabled in inventories/group_vars/all.yml (bootstrap_vault.yml).
+# CloudTrail → CloudWatch Logs needs iam:PassRole on the CWL role for the deployer (see README). Set false to omit CWL + KMS log alarm.
+vault_cloudtrail_cloudwatch_logs_enabled: true
+vault_cloudtrail_trail_name: sheltered-harbor-vault-audit
+vault_cloudtrail_log_group_name: /aws/cloudtrail/sheltered-harbor-vault
+vault_cloudtrail_cw_role_name: CloudTrailCloudWatchLogsRole
+# Empty = auto: sh-<account-id>-cloudtrail-logs (globally unique, ≤63 chars)
+vault_cloudtrail_bucket_name: ""
+vault_cloudtrail_s3_key_prefix: ""
+# CloudWatch Logs retention for the trail log group
+vault_cloudtrail_log_retention_days: 365
+# SNS for KMS + GuardDuty alarms (empty = create vault-security-alerts in this account)
+vault_security_alarm_sns_topic_arn: ""
+vault_security_alarm_sns_topic_name: vault-security-alerts
+# Minimum GuardDuty finding severity (0–8.9) to notify via EventBridge → SNS
+vault_guardduty_alarm_min_severity: 7.0
+# Metric filter / alarm namespace for vault CMK critical API usage
+vault_kms_alarm_metric_namespace: ShelteredHarborVault/KMS
+vault_kms_alarm_metric_name: VaultCMKCriticalApiCount

@@ -1,20 +1,9 @@
 ---
-- amazon.aws.iam_role:
-    name: VaultWriteRole
-    assume_role_policy_document:
-      Version: "2012-10-17"
-      Statement:
-        - Effect: Allow
-          Principal:
-            AWS: "arn:aws:iam::{{ trusted_account_id }}:root"
-          Action: sts:AssumeRole
-    state: present
-
-- amazon.aws.iam_policy:
-    iam_type: role
-    iam_name: VaultWriteRole
-    policy_name: VaultWritePolicy
-    policy_json: "{{ vault_writer_policy | to_json }}"
+- name: Customer-managed policy VaultWriteManagedPolicy (vault S3/KMS writer permissions)
+  amazon.aws.iam_managed_policy:
+    name: VaultWriteManagedPolicy
+    description: Sheltered Harbor vault writer (least privilege)
+    policy: "{{ vault_writer_policy | to_json }}"
     state: present
   vars:
     vault_writer_policy:
@@ -30,3 +19,32 @@
             - kms:Encrypt
             - kms:GenerateDataKey
           Resource: "{{ vault_kms_key_arn }}"
+
+- name: IAM role VaultWriteRole (trust + optional VaultWriteManagedPolicy attachment)
+  amazon.aws.iam_role:
+    name: VaultWriteRole
+    assume_role_policy_document:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal:
+            AWS: "arn:aws:iam::{{ trusted_account_id }}:root"
+          Action: sts:AssumeRole
+    create_instance_profile: false
+    delete_instance_profile: false
+    managed_policies: "{{ ['VaultWriteManagedPolicy'] if not (vault_time_bound_access | default(false) | bool) else omit }}"
+    purge_policies: "{{ false if (vault_time_bound_access | default(false) | bool) else true }}"
+    state: present
+
+- name: Resolve whether VaultWriteRole exists in AWS (avoids NoSuchEntity on legacy inline cleanup)
+  amazon.aws.iam_role_info:
+    name: VaultWriteRole
+  register: vault_write_role_info
+
+- name: Remove legacy inline VaultWritePolicy (replaced by VaultWriteManagedPolicy)
+  amazon.aws.iam_policy:
+    iam_type: role
+    iam_name: VaultWriteRole
+    policy_name: VaultWritePolicy
+    state: absent
+  when: vault_write_role_info.iam_roles | length > 0

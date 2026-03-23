@@ -1,0 +1,256 @@
+---
+- name: Resolve account for ARNs
+  amazon.aws.aws_caller_info:
+  register: aws_caller
+
+- name: IAM role for GuardDuty Malware Protection for S3
+  amazon.aws.iam_role:
+    name: "{{ vault_guardduty_malware_role_name }}"
+    assume_role_policy_document:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: malware-protection-plan.guardduty.amazonaws.com
+          Action: sts:AssumeRole
+    create_instance_profile: false
+    delete_instance_profile: false
+    state: present
+  register: guardduty_malware_role
+
+- name: Inline policy for GuardDuty to scan, notify, and tag the vault bucket
+  amazon.aws.iam_policy:
+    iam_type: role
+    iam_name: "{{ vault_guardduty_malware_role_name }}"
+    policy_name: GuardDutyVaultS3MalwareScanPolicy
+    policy_json: "{{ guardduty_malware_s3_policy | to_json }}"
+    state: present
+  when: not ansible_check_mode
+  vars:
+    guardduty_malware_s3_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: AllowManagedRuleToSendS3EventsToGuardDuty
+          Effect: Allow
+          Action:
+            - events:PutRule
+            - events:DeleteRule
+            - events:PutTargets
+            - events:RemoveTargets
+          Resource:
+            - "arn:aws:events:{{ aws_region }}:{{ aws_caller.account }}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
+          Condition:
+            StringLike:
+              events:ManagedBy: malware-protection-plan.guardduty.amazonaws.com
+        - Sid: AllowGuardDutyToMonitorEventBridgeManagedRule
+          Effect: Allow
+          Action:
+            - events:DescribeRule
+            - events:ListTargetsByRule
+          Resource:
+            - "arn:aws:events:{{ aws_region }}:{{ aws_caller.account }}:rule/DO-NOT-DELETE-AmazonGuardDutyMalwareProtectionS3*"
+        - Sid: AllowPostScanTag
+          Effect: Allow
+          Action:
+            - s3:PutObjectTagging
+            - s3:GetObjectTagging
+            - s3:PutObjectVersionTagging
+            - s3:GetObjectVersionTagging
+          Resource:
+            - "arn:aws:s3:::{{ vault_bucket_name }}/*"
+        - Sid: AllowEnableS3EventBridgeEvents
+          Effect: Allow
+          Action:
+            - s3:PutBucketNotification
+            - s3:GetBucketNotification
+          Resource:
+            - "arn:aws:s3:::{{ vault_bucket_name }}"
+        - Sid: AllowPutValidationObject
+          Effect: Allow
+          Action:
+            - s3:PutObject
+          Resource:
+            - "arn:aws:s3:::{{ vault_bucket_name }}/malware-protection-resource-validation-object"
+        - Sid: AllowCheckBucketOwnership
+          Effect: Allow
+          Action:
+            - s3:ListBucket
+          Resource:
+            - "arn:aws:s3:::{{ vault_bucket_name }}"
+        - Sid: AllowMalwareScan
+          Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+          Resource:
+            - "arn:aws:s3:::{{ vault_bucket_name }}/*"
+        - Sid: AllowDecryptForMalwareScan
+          Effect: Allow
+          Action:
+            - kms:GenerateDataKey
+            - kms:Decrypt
+          Resource: "{{ vault_kms_key_arn }}"
+          Condition:
+            StringLike:
+              kms:ViaService: "s3.{{ aws_region }}.amazonaws.com"
+
+- name: Check for existing Malware Protection plan for this bucket
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
+      - "{{ role_path }}/files/guardduty_mpp.py"
+      - find
+      - "{{ aws_region }}"
+      - "{{ vault_bucket_name }}"
+  register: existing_malware_plan
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Build protected resource for CreateMalwareProtectionPlan
+  ansible.builtin.set_fact:
+    vault_mpp_protected_resource: >-
+      {{
+        { 'S3Bucket': { 'BucketName': vault_bucket_name } }
+        if (vault_guardduty_s3_scan_prefixes | default([]) | length) == 0
+        else { 'S3Bucket': {
+          'BucketName': vault_bucket_name,
+          'ObjectPrefixes': vault_guardduty_s3_scan_prefixes
+        } }
+      }}
+
+- name: Create Malware Protection plan for the vault bucket
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
+      - "{{ role_path }}/files/guardduty_mpp.py"
+      - create
+      - "{{ aws_region }}"
+      - "{{ guardduty_malware_role.iam_role.arn }}"
+      - "{{ vault_mpp_protected_resource | to_json }}"
+      - "{{ 'true' if (vault_guardduty_s3_tagging_enabled | bool) else 'false' }}"
+  register: create_mpp
+  when:
+    - not ansible_check_mode
+    - existing_malware_plan.rc != 0
+  changed_when: create_mpp.rc == 0
+
+- name: Optional SNS subscription for scan-result events (partner pipeline)
+  when:
+    - not ansible_check_mode
+    - (vault_forensic_scan_sns_topic_arn | default('') | string | length) > 0
+  block:
+    - name: EventBridge rule — GuardDuty S3 malware scan results (pattern only)
+      amazon.aws.cloudwatchevent_rule:
+        name: vault-guardduty-s3-malware-scan-results
+        state: present
+        region: "{{ aws_region }}"
+        event_pattern: "{{ forensic_eb_pattern | to_json }}"
+      register: forensic_eb_rule
+      vars:
+        forensic_eb_pattern:
+          source:
+            - aws.guardduty
+          detail-type:
+            - GuardDuty Malware Protection Object Scan Result
+          detail:
+            s3ObjectDetails:
+              bucketName:
+                - "{{ vault_bucket_name }}"
+
+    - name: SNS topic policy — allow this EventBridge rule to publish (replaces topic policy)
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
+          - "{{ role_path }}/files/guardduty_mpp.py"
+          - sns-set-policy
+          - "{{ aws_region }}"
+          - "{{ vault_forensic_scan_sns_topic_arn }}"
+          - "{{ forensic_sns_policy | to_json }}"
+      vars:
+        forensic_sns_policy:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: AllowEventBridgePublish
+              Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: sns:Publish
+              Resource: "{{ vault_forensic_scan_sns_topic_arn }}"
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: "{{ forensic_eb_rule.rule.arn | default(forensic_eb_rule.arn) }}"
+      register: sns_policy_set
+      changed_when: sns_policy_set.rc == 0
+
+    - name: Attach SNS topic as EventBridge target
+      amazon.aws.cloudwatchevent_rule:
+        name: vault-guardduty-s3-malware-scan-results
+        state: present
+        region: "{{ aws_region }}"
+        event_pattern: "{{ forensic_eb_pattern | to_json }}"
+        targets:
+          - id: ForensicScanSns
+            arn: "{{ vault_forensic_scan_sns_topic_arn }}"
+      vars:
+        forensic_eb_pattern:
+          source:
+            - aws.guardduty
+          detail-type:
+            - GuardDuty Malware Protection Object Scan Result
+          detail:
+            s3ObjectDetails:
+              bucketName:
+                - "{{ vault_bucket_name }}"
+
+- name: Optional partner scanner role (read-only + decrypt for external tooling)
+  when:
+    - vault_partner_scanner_enabled | bool
+    - (vault_partner_scanner_principal | default('') | string | trim | length) > 0
+  block:
+    - name: Partner scanner role
+      amazon.aws.iam_role:
+        name: "{{ vault_partner_scanner_role_name }}"
+        assume_role_policy_document:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: "{{ vault_partner_scanner_principal }}"
+              Action: sts:AssumeRole
+        create_instance_profile: false
+        delete_instance_profile: false
+        state: present
+
+    - name: Partner scanner read policy
+      amazon.aws.iam_policy:
+        iam_type: role
+        iam_name: "{{ vault_partner_scanner_role_name }}"
+        policy_name: VaultPartnerScannerReadPolicy
+        policy_json: "{{ partner_scanner_policy | to_json }}"
+        state: present
+      vars:
+        partner_scanner_policy:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+                - s3:GetBucketLocation
+                - s3:GetBucketVersioning
+              Resource: "arn:aws:s3:::{{ vault_bucket_name }}"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:GetObjectVersion
+                - s3:GetObjectTagging
+                - s3:GetObjectVersionTagging
+              Resource: "arn:aws:s3:::{{ vault_bucket_name }}/*"
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:DescribeKey
+              Resource: "{{ vault_kms_key_arn }}"
+              Condition:
+                StringLike:
+                  kms:ViaService: "s3.{{ aws_region }}.amazonaws.com"

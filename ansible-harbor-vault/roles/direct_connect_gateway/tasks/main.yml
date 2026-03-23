@@ -1,0 +1,13 @@
+---
+- name: Create Direct Connect gateway and associate with virtual private gateway
+  community.aws.directconnect_gateway:
+    state: present
+    name: "{{ vault_dx_gateway_name }}"
+    amazon_asn: "{{ vault_dx_amazon_asn | int }}"
+    virtual_gateway_id: "{{ vault_vgw_id }}"
+    region: "{{ aws_region }}"
+  register: dxgw_out
+  when:
+    - vault_direct_connect_enabled | bool
+    - vault_vgw_id is defined
+    - vault_vgw_id | length > 0

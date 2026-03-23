@@ -1,0 +1,23 @@
+---
+aws_region: us-east-1
+vault_bucket_name: my-org-sh-vault-unique
+vault_retention_years: 7
+kms_alias: alias/sheltered-harbor-vault
+# Optional: account ID allowed to assume VaultWriteRole (omit or use placeholder to default to the playbook AWS account)
+# trusted_account_id: "999999999999"
+
+# Air-gapped / isolation (optional; see playbooks/bootstrap_network_isolation.yml)
+vault_network_isolation_enabled: false
+vault_org_parent_id: ""
+vault_direct_connect_enabled: false
+vault_dx_amazon_asn: 64512
+vault_time_bound_access: false
+vault_write_window_open_cron: "cron(0 9 * * ? *)"
+vault_write_window_close_cron: "cron(0 17 * * ? *)"
+
+# Forensic scanning — GuardDuty Malware Protection for S3 + optional EventBridge→SNS + partner read role
+vault_forensic_scanning_enabled: true
+
+# Logging & monitoring — CloudTrail, GuardDuty detector, KMS/GuardDuty→SNS alarms (needs iam:PassRole for CWL; see README)
+vault_logging_monitoring_enabled: true
+# vault_cloudtrail_cloudwatch_logs_enabled: false   # uncomment to skip CloudTrail→CloudWatch Logs + KMS log alarm if PassRole is not available yet

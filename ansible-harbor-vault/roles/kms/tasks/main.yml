@@ -6,5 +6,12 @@
     state: present
   register: kms_key
 
+# In --check when the key would be created, kms_key returns only {changed: true} (no key_arn).
 - ansible.builtin.set_fact:
-    vault_kms_key_arn: "{{ kms_key.key_arn }}"
+    vault_kms_key_arn: >-
+      {{ kms_key.key_arn
+         | default(kms_key.key_id | default('arn:aws:kms:' + aws_region + ':000000000000:key/00000000-0000-0000-0000-000000000000')) }}
+
+- ansible.builtin.set_fact:
+    vault_kms_key_id: >-
+      {{ kms_key.key_id | default(vault_kms_key_arn | regex_replace('.*key/', '')) }}

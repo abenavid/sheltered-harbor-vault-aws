@@ -1,6 +1,0 @@
----
-aws_region: us-east-1
-vault_bucket_name: my-org-sh-vault-unique
-vault_retention_years: 7
-kms_alias: alias/sheltered-harbor-vault
-trusted_account_id: "111111111111"

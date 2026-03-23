@@ -1,0 +1,203 @@
+---
+- name: Resolve availability zones
+  amazon.aws.aws_az_info:
+    region: "{{ aws_region }}"
+  register: az_info
+
+- name: Select AZs for vault network
+  ansible.builtin.set_fact:
+    vault_azs: "{{ (az_info.availability_zones | map(attribute='zone_name') | list)[: (vault_az_count | int)] }}"
+
+- name: Ensure vault VPC exists
+  amazon.aws.ec2_vpc_net:
+    name: "{{ vault_vpc_name }}"
+    cidr_block:
+      - "{{ vault_vpc_cidr }}"
+    dns_hostnames: true
+    dns_support: true
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}"
+      Purpose: sheltered-harbor-vault-network
+    state: present
+  register: vpc_out
+
+- name: Attach internet gateway
+  amazon.aws.ec2_vpc_igw:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    state: present
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-igw"
+  register: igw_out
+
+- name: Create public subnets (NAT / edge)
+  amazon.aws.ec2_vpc_subnet:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    cidr: "{{ item.0 }}"
+    az: "{{ item.1 }}"
+    map_public_ip_on_launch: true
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-public-{{ idx }}"
+      Tier: public
+      Zone: ingress-edge
+  loop: "{{ vault_subnet_public_cidrs | zip(vault_azs) | list }}"
+  loop_control:
+    index_var: idx
+  register: pub_subnets
+
+- name: Create egress subnets (controlled outbound via NAT)
+  amazon.aws.ec2_vpc_subnet:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    cidr: "{{ item.0 }}"
+    az: "{{ item.1 }}"
+    map_public_ip_on_launch: false
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-egress-{{ idx }}"
+      Tier: private
+      Zone: egress
+  loop: "{{ vault_subnet_egress_cidrs | zip(vault_azs) | list }}"
+  loop_control:
+    index_var: idx
+  register: egress_subnets
+
+- name: Create ingress subnets (on-prem / DX path; no direct internet route)
+  amazon.aws.ec2_vpc_subnet:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    cidr: "{{ item.0 }}"
+    az: "{{ item.1 }}"
+    map_public_ip_on_launch: false
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-ingress-{{ idx }}"
+      Tier: private
+      Zone: ingress
+  loop: "{{ vault_subnet_ingress_cidrs | zip(vault_azs) | list }}"
+  loop_control:
+    index_var: idx
+  register: ingress_subnets
+
+- name: Allocate Elastic IP for NAT
+  amazon.aws.ec2_eip:
+    domain: vpc
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-nat-eip"
+  register: nat_eip
+  when: vault_single_nat_gateway | bool
+
+- name: Create NAT gateway (single-AZ egress path)
+  amazon.aws.ec2_vpc_nat_gateway:
+    subnet_id: "{{ pub_subnets.results[0].subnet.id }}"
+    allocation_id: "{{ nat_eip.allocation_id }}"
+    region: "{{ aws_region }}"
+    wait: true
+    tags:
+      Name: "{{ vault_vpc_name }}-nat"
+  register: nat_gw
+  when: vault_single_nat_gateway | bool
+
+- name: Create virtual private gateway (Direct Connect / VPN attachment point)
+  amazon.aws.ec2_vpc_vgw:
+    name: "{{ vault_vpc_name }}-vgw"
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    type: ipsec.1
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-vgw"
+    state: present
+  register: vault_vgw
+  when: vault_provision_vgw | bool
+
+- name: Public route table (IGW)
+  amazon.aws.ec2_vpc_route_table:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-rt-public"
+    subnets: "{{ pub_subnets.results | map(attribute='subnet.id') | list }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ igw_out.gateway_id }}"
+  register: rt_public
+
+- name: Egress route table (NAT for private egress zone)
+  amazon.aws.ec2_vpc_route_table:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-rt-egress"
+    subnets: "{{ egress_subnets.results | map(attribute='subnet.id') | list }}"
+    routes:
+      - dest: 0.0.0.0/0
+        nat_gateway_id: "{{ nat_gw.nat_gateway_id }}"
+  register: rt_egress
+  when: vault_single_nat_gateway | bool
+
+- name: Ingress route table (VGW propagation; no default route to internet)
+  amazon.aws.ec2_vpc_route_table:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    region: "{{ aws_region }}"
+    tags:
+      Name: "{{ vault_vpc_name }}-rt-ingress"
+    subnets: "{{ ingress_subnets.results | map(attribute='subnet.id') | list }}"
+    routes: []
+    propagating_vgw_ids: "{{ [vault_vgw.vgw.id] if (vault_provision_vgw | bool and vault_vgw is defined and vault_vgw.vgw is defined and vault_vgw.vgw.id is defined) else [] }}"
+    purge_routes: false
+  register: rt_ingress
+
+- name: S3 gateway VPC endpoint (private route tables)
+  amazon.aws.ec2_vpc_endpoint:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    service: "com.amazonaws.{{ aws_region }}.s3"
+    vpc_endpoint_type: Gateway
+    route_table_ids:
+      - "{{ rt_egress.route_table.id }}"
+      - "{{ rt_ingress.route_table.id }}"
+    region: "{{ aws_region }}"
+    state: present
+  when: rt_egress is defined and rt_ingress is defined
+
+- name: Security group for interface VPC endpoints
+  amazon.aws.ec2_security_group:
+    name: "{{ vault_vpc_name }}-vpce-sg"
+    description: HTTPS from VPC to interface endpoints (KMS, STS)
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    region: "{{ aws_region }}"
+    rules:
+      - proto: tcp
+        ports:
+          - 443
+        cidr_ip: "{{ vault_vpc_cidr }}"
+        rule_desc: TLS from VPC CIDR
+  register: vpce_sg
+  when: vault_vpc_interface_endpoints_enabled | bool
+
+- name: KMS interface VPC endpoint
+  amazon.aws.ec2_vpc_endpoint:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    service: "com.amazonaws.{{ aws_region }}.kms"
+    vpc_endpoint_type: Interface
+    vpc_endpoint_subnets: "{{ ingress_subnets.results | map(attribute='subnet.id') | list }}"
+    vpc_endpoint_security_groups: "{{ [vpce_sg.group_id] }}"
+    region: "{{ aws_region }}"
+    state: present
+  when: vault_vpc_interface_endpoints_enabled | bool
+
+- name: STS interface VPC endpoint (AssumeRole from private subnets)
+  amazon.aws.ec2_vpc_endpoint:
+    vpc_id: "{{ vpc_out.vpc.id }}"
+    service: "com.amazonaws.{{ aws_region }}.sts"
+    vpc_endpoint_type: Interface
+    vpc_endpoint_subnets: "{{ ingress_subnets.results | map(attribute='subnet.id') | list }}"
+    vpc_endpoint_security_groups: "{{ [vpce_sg.group_id] }}"
+    region: "{{ aws_region }}"
+    state: present
+  when: vault_vpc_interface_endpoints_enabled | bool
+
+- name: Expose VGW id for Direct Connect role
+  ansible.builtin.set_fact:
+    vault_vgw_id: "{{ vault_vgw.vgw.id }}"
+  when: vault_provision_vgw | bool and vault_vgw is defined and vault_vgw.vgw.id is defined

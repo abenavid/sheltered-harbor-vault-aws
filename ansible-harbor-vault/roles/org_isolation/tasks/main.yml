@@ -1,0 +1,11 @@
+---
+- name: Deploy Organizations OU and SCP via CloudFormation
+  amazon.aws.cloudformation:
+    stack_name: "{{ vault_org_stack_name }}"
+    state: present
+    region: "{{ aws_region }}"
+    template: "{{ role_path }}/files/cfn-vault-ou.yaml"
+    template_parameters:
+      ParentId: "{{ vault_org_parent_id }}"
+    capabilities: []
+  when: vault_org_parent_id is defined and (vault_org_parent_id | string | trim | length) > 0

@@ -21,26 +21,51 @@
         ENV_FILE: "{{ playbook_dir }}/../.env"
       register: env_json
       changed_when: false
-      no_log: true
+      # Shell is skipped in --check by default; we need .env parsed for dry-run.
+      check_mode: false
+      no_log: false
 
     - name: Apply .env to facts
       ansible.builtin.set_fact:
         vault_dotenv: "{{ env_json.stdout | from_json }}"
-      no_log: true
+      no_log: false
 
     - name: Prefer AWS_DEFAULT_REGION from .env
       ansible.builtin.set_fact:
-        aws_region: "{{ vault_dotenv.AWS_DEFAULT_REGION | default(aws_region) }}"
+        aws_region: "{{ vault_dotenv.AWS_DEFAULT_REGION | default(aws_region | default('us-east-1')) }}"
 
   tasks:
     - name: Bootstrap vault
       block:
+        - name: Get AWS account ID for IAM role trust policy
+          amazon.aws.aws_caller_info:
+          register: aws_caller
+
+        - name: Resolve trusted_account_id for VaultWriteRole
+          ansible.builtin.set_fact:
+            trusted_account_id: >-
+              {{
+                trusted_account_id
+                if (
+                  trusted_account_id is defined
+                  and (trusted_account_id | string | trim | length) > 0
+                  and (trusted_account_id | string) != '111111111111'
+                )
+                else aws_caller.account
+              }}
+
         - ansible.builtin.include_role:
             name: kms
         - ansible.builtin.include_role:
             name: s3_vault
         - ansible.builtin.include_role:
+            name: forensic_scanning
+          when: vault_forensic_scanning_enabled | default(false) | bool
+        - ansible.builtin.include_role:
             name: iam_writer
+        - ansible.builtin.include_role:
+            name: logging_monitoring
+          when: vault_logging_monitoring_enabled | default(false) | bool
       environment:
         AWS_ACCESS_KEY_ID: "{{ vault_dotenv.AWS_ACCESS_KEY_ID }}"
         AWS_SECRET_ACCESS_KEY: "{{ vault_dotenv.AWS_SECRET_ACCESS_KEY }}"

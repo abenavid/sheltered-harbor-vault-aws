@@ -1,0 +1,4 @@
+---
+vault_direct_connect_enabled: false
+vault_dx_gateway_name: sh-vault-dxgw
+vault_dx_amazon_asn: 64512

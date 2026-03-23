@@ -1,0 +1,106 @@
+---
+- name: Resolve account for ARNs
+  amazon.aws.aws_caller_info:
+  register: aws_caller
+
+- name: Package Lambda
+  ansible.builtin.archive:
+    path: "{{ role_path }}/files/lambda/handler.py"
+    dest: /tmp/vault-timebound-lambda.zip
+    format: zip
+  when: not ansible_check_mode
+
+- name: Lambda execution role
+  amazon.aws.iam_role:
+    name: VaultTimeBoundLambdaRole
+    assume_role_policy_document:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+    managed_policies:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    state: present
+  register: lambda_exec_role
+
+- name: Inline policy for Lambda to attach or detach vault writer policy
+  amazon.aws.iam_policy:
+    iam_type: role
+    iam_name: VaultTimeBoundLambdaRole
+    policy_name: VaultTimeBoundLambdaPolicy
+    policy_json: "{{ timebound_lambda_policy | to_json }}"
+    state: present
+  when: not ansible_check_mode
+  vars:
+    timebound_lambda_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Action:
+            - iam:AttachRolePolicy
+            - iam:DetachRolePolicy
+            - iam:ListAttachedRolePolicies
+          Resource: "arn:aws:iam::{{ aws_caller.account }}:role/VaultWriteRole"
+
+- name: Time-bound access Lambda function
+  amazon.aws.lambda:
+    name: VaultTimeBoundAccess
+    runtime: python3.12
+    handler: handler.lambda_handler
+    role: "{{ lambda_exec_role.iam_role.arn }}"
+    zip_file: /tmp/vault-timebound-lambda.zip
+    timeout: 60
+    memory_size: 128
+    environment_variables:
+      VAULT_ROLE_NAME: VaultWriteRole
+      VAULT_POLICY_ARN: "arn:aws:iam::{{ aws_caller.account }}:policy/VaultWriteManagedPolicy"
+    region: "{{ aws_region }}"
+    state: present
+  register: vault_timebound_lambda
+  when: not ansible_check_mode
+
+- name: EventBridge rule — open vault write window
+  amazon.aws.cloudwatchevent_rule:
+    name: vault-write-window-open
+    schedule_expression: "{{ vault_write_window_open_cron }}"
+    state: present
+    region: "{{ aws_region }}"
+    targets:
+      - id: VaultTimeBoundOpen
+        arn: "{{ vault_timebound_lambda.function_arn }}"
+        input: '{"action":"open"}'
+  register: rule_open
+  when: not ansible_check_mode
+
+- name: Allow EventBridge to invoke Lambda (open rule)
+  amazon.aws.lambda_policy:
+    function_name: VaultTimeBoundAccess
+    action: lambda:InvokeFunction
+    principal: events.amazonaws.com
+    statement_id: vault-timebound-open
+    source_arn: "{{ rule_open.arn }}"
+  when: not ansible_check_mode
+
+- name: EventBridge rule — close vault write window
+  amazon.aws.cloudwatchevent_rule:
+    name: vault-write-window-close
+    schedule_expression: "{{ vault_write_window_close_cron }}"
+    state: present
+    region: "{{ aws_region }}"
+    targets:
+      - id: VaultTimeBoundClose
+        arn: "{{ vault_timebound_lambda.function_arn }}"
+        input: '{"action":"close"}'
+  register: rule_close
+  when: not ansible_check_mode
+
+- name: Allow EventBridge to invoke Lambda (close rule)
+  amazon.aws.lambda_policy:
+    function_name: VaultTimeBoundAccess
+    action: lambda:InvokeFunction
+    principal: events.amazonaws.com
+    statement_id: vault-timebound-close
+    source_arn: "{{ rule_close.arn }}"
+  when: not ansible_check_mode

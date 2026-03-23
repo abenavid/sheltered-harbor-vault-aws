@@ -1,0 +1,275 @@
+---
+# CloudTrail → CloudWatch Logs requires the deploying principal to have iam:PassRole on the
+# CloudTrail role (see README). Set vault_cloudtrail_cloudwatch_logs_enabled: false to skip
+# CWL, the IAM role, and KMS metric filter/alarm until PassRole is granted.
+
+- name: Resolve account and vault CMK identifiers
+  amazon.aws.aws_caller_info:
+  register: logging_aws_caller
+
+- name: Compute CloudTrail bucket name and CloudTrail SourceArn
+  ansible.builtin.set_fact:
+    vault_cloudtrail_bucket_name_resolved: >-
+      {{
+        vault_cloudtrail_bucket_name | trim
+        if (vault_cloudtrail_bucket_name | default('') | trim | length) > 0
+        else ('sh-' ~ logging_aws_caller.account ~ '-cloudtrail-logs')
+      }}
+    vault_cloudtrail_source_arn: >-
+      {{ 'arn:aws:cloudtrail:' ~ aws_region ~ ':' ~ logging_aws_caller.account ~ ':trail/' ~ vault_cloudtrail_trail_name }}
+    vault_kms_key_id_resolved: "{{ vault_kms_key_id | default(vault_kms_key_arn | regex_replace('.*key/', '')) }}"
+
+- name: CloudWatch Logs group + IAM role for CloudTrail delivery
+  when: vault_cloudtrail_cloudwatch_logs_enabled | bool
+  block:
+    - name: CloudWatch Logs group for CloudTrail
+      amazon.aws.cloudwatchlogs_log_group:
+        log_group_name: "{{ vault_cloudtrail_log_group_name }}"
+        region: "{{ aws_region }}"
+        retention: "{{ vault_cloudtrail_log_retention_days | int }}"
+        state: present
+      register: vault_cloudtrail_log_group
+
+    - name: CloudTrail log group ARN for API (must end with :*)
+      ansible.builtin.set_fact:
+        vault_cloudtrail_cw_logs_arn: >-
+          {{
+            vault_cloudtrail_log_group.arn
+            if vault_cloudtrail_log_group.arn.endswith(':*')
+            else (vault_cloudtrail_log_group.arn ~ ':*')
+          }}
+
+    - name: IAM role — CloudTrail to CloudWatch Logs
+      amazon.aws.iam_role:
+        name: "{{ vault_cloudtrail_cw_role_name }}"
+        assume_role_policy_document:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: cloudtrail.amazonaws.com
+              Action: sts:AssumeRole
+        create_instance_profile: false
+        delete_instance_profile: false
+        state: present
+      register: vault_cloudtrail_cw_role
+
+    - name: Inline policy — CloudTrail writes to vault log group
+      amazon.aws.iam_policy:
+        iam_type: role
+        iam_name: "{{ vault_cloudtrail_cw_role_name }}"
+        policy_name: CloudTrailCloudWatchLogsDelivery
+        policy_json: "{{ vault_cloudtrail_cw_inline_policy | to_json }}"
+        state: present
+      when: not ansible_check_mode
+      vars:
+        vault_cloudtrail_cw_inline_policy:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: "arn:aws:logs:{{ aws_region }}:{{ logging_aws_caller.account }}:log-group:{{ vault_cloudtrail_log_group_name }}:*"
+
+- name: S3 bucket for CloudTrail log delivery
+  amazon.aws.s3_bucket:
+    name: "{{ vault_cloudtrail_bucket_name_resolved }}"
+    region: "{{ aws_region }}"
+    state: present
+    public_access:
+      block_public_acls: true
+      block_public_policy: true
+      ignore_public_acls: true
+      restrict_public_buckets: true
+    policy: "{{ vault_cloudtrail_bucket_policy | to_json }}"
+  when: not ansible_check_mode
+  vars:
+    vault_cloudtrail_bucket_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: AWSCloudTrailAclCheck
+          Effect: Allow
+          Principal:
+            Service: cloudtrail.amazonaws.com
+          Action: s3:GetBucketAcl
+          Resource: "arn:aws:s3:::{{ vault_cloudtrail_bucket_name_resolved }}"
+        - Sid: AWSCloudTrailWrite
+          Effect: Allow
+          Principal:
+            Service: cloudtrail.amazonaws.com
+          Action: s3:PutObject
+          Resource: "arn:aws:s3:::{{ vault_cloudtrail_bucket_name_resolved }}/AWSLogs/{{ logging_aws_caller.account }}/*"
+          Condition:
+            StringEquals:
+              s3:x-amz-acl: bucket-owner-full-control
+              aws:SourceArn: "{{ vault_cloudtrail_source_arn }}"
+
+- name: Multi-region CloudTrail with management events (and optional CloudWatch Logs)
+  amazon.aws.cloudtrail:
+    name: "{{ vault_cloudtrail_trail_name }}"
+    s3_bucket_name: "{{ vault_cloudtrail_bucket_name_resolved }}"
+    s3_key_prefix: "{{ vault_cloudtrail_s3_key_prefix | default(omit, true) }}"
+    region: "{{ aws_region }}"
+    is_multi_region_trail: true
+    enable_log_file_validation: true
+    include_global_events: true
+    enable_logging: true
+    cloudwatch_logs_role_arn: "{{ vault_cloudtrail_cw_role.iam_role.arn if vault_cloudtrail_cloudwatch_logs_enabled | bool else omit }}"
+    cloudwatch_logs_log_group_arn: "{{ vault_cloudtrail_cw_logs_arn if vault_cloudtrail_cloudwatch_logs_enabled | bool else omit }}"
+    state: present
+
+- name: Enable GuardDuty detector (API)
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
+      - "{{ role_path }}/files/guardduty_detector.py"
+      - "{{ aws_region }}"
+  register: guardduty_detector_enable
+  changed_when: guardduty_detector_enable.rc == 0
+  when: not ansible_check_mode
+
+- name: Use existing SNS topic for security alarms
+  ansible.builtin.set_fact:
+    vault_security_alarm_sns_topic_arn_effective: "{{ vault_security_alarm_sns_topic_arn | trim }}"
+  when: (vault_security_alarm_sns_topic_arn | default('') | trim | length) > 0
+
+- name: Create SNS topic for security alarms
+  community.aws.sns_topic:
+    name: "{{ vault_security_alarm_sns_topic_name }}"
+    display_name: Sheltered Harbor vault security alarms
+    state: present
+    region: "{{ aws_region }}"
+  register: vault_security_sns_created
+  when: (vault_security_alarm_sns_topic_arn | default('') | trim | length) == 0
+
+# community.aws.sns_topic may omit topic_arn in --check; ARN is still deterministic from name + account.
+- name: Effective SNS topic ARN (created topic path)
+  ansible.builtin.set_fact:
+    vault_security_alarm_sns_topic_arn_effective: >-
+      {{
+        vault_security_sns_created.topic_arn | default(
+          'arn:aws:sns:' ~ aws_region ~ ':' ~ logging_aws_caller.account ~ ':' ~ vault_security_alarm_sns_topic_name,
+          true
+        )
+      }}
+  when:
+    - (vault_security_alarm_sns_topic_arn | default('') | trim | length) == 0
+    - not (vault_security_sns_created.skipped | default(false))
+
+- name: SNS topic policy — CloudWatch alarms and EventBridge (vault-* rules)
+  community.aws.sns_topic:
+    name: "{{ vault_security_alarm_sns_topic_arn_effective.split(':')[-1] }}"
+    state: present
+    region: "{{ aws_region }}"
+    policy: "{{ vault_security_sns_combined_policy }}"
+  when:
+    - not ansible_check_mode
+    - (vault_security_alarm_sns_topic_arn_effective | default('') | length) > 0
+    - (vault_security_alarm_sns_topic_arn | default('') | trim | length) == 0
+  vars:
+    vault_security_sns_combined_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: AllowCloudWatchAlarms
+          Effect: Allow
+          Principal:
+            Service: cloudwatch.amazonaws.com
+          Action: sns:Publish
+          Resource: "{{ vault_security_alarm_sns_topic_arn_effective }}"
+        - Sid: AllowEventBridgeVaultRules
+          Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action: sns:Publish
+          Resource: "{{ vault_security_alarm_sns_topic_arn_effective }}"
+          Condition:
+            StringLike:
+              aws:SourceArn: "arn:aws:events:{{ aws_region }}:{{ logging_aws_caller.account }}:rule/vault-*"
+
+- name: CloudWatch metric filter — vault CMK critical KMS APIs (from CloudTrail logs)
+  amazon.aws.cloudwatchlogs_log_group_metric_filter:
+    state: present
+    log_group_name: "{{ vault_cloudtrail_log_group_name }}"
+    filter_name: vault-cmk-critical-kms-events
+    filter_pattern: "{{ vault_kms_critical_filter_pattern }}"
+    metric_transformation:
+      metric_name: "{{ vault_kms_alarm_metric_name }}"
+      metric_namespace: "{{ vault_kms_alarm_metric_namespace }}"
+      metric_value: "1"
+    region: "{{ aws_region }}"
+  when:
+    - not ansible_check_mode
+    - vault_cloudtrail_cloudwatch_logs_enabled | bool
+  vars:
+    vault_kms_critical_filter_pattern: >-
+      { ($.eventSource = kms.amazonaws.com) && (($.eventName = DisableKey) || ($.eventName = ScheduleKeyDeletion) || ($.eventName = DeleteAlias)) && (($.requestParameters.keyId = "{{ vault_kms_key_id_resolved }}") || ($.resources[0].ARN = "{{ vault_kms_key_arn }}")) }
+
+- name: CloudWatch alarm — vault CMK critical API usage
+  amazon.aws.cloudwatch_metric_alarm:
+    name: vault-cmk-critical-api-usage
+    description: >-
+      CloudTrail recorded DisableKey, ScheduleKeyDeletion, or DeleteAlias for the vault CMK ({{ vault_kms_key_arn }}).
+    metric_name: "{{ vault_kms_alarm_metric_name }}"
+    namespace: "{{ vault_kms_alarm_metric_namespace }}"
+    statistic: Sum
+    period: 300
+    evaluation_periods: 1
+    threshold: 1
+    comparison: GreaterThanOrEqualToThreshold
+    treat_missing_data: notBreaching
+    alarm_actions:
+      - "{{ vault_security_alarm_sns_topic_arn_effective }}"
+    region: "{{ aws_region }}"
+    state: present
+  when:
+    - not ansible_check_mode
+    - (vault_security_alarm_sns_topic_arn_effective | default('') | length) > 0
+    - vault_cloudtrail_cloudwatch_logs_enabled | bool
+
+# EventBridge requires numeric (JSON number) for numeric matchers — quoted Jinja in YAML becomes "7.0" string and fails.
+- name: EventBridge rule — GuardDuty findings at or above severity threshold
+  amazon.aws.cloudwatchevent_rule:
+    name: vault-guardduty-findings-notify
+    state: present
+    region: "{{ aws_region }}"
+    event_pattern: >-
+      {{
+        {
+          'source': ['aws.guardduty'],
+          'detail-type': ['GuardDuty Finding'],
+          'detail': {
+            'severity': [
+              {'numeric': ['>=', vault_guardduty_alarm_min_severity | float]}
+            ]
+          }
+        } | to_json
+      }}
+  register: vault_guardduty_eb_rule
+  when:
+    - not ansible_check_mode
+    - (vault_security_alarm_sns_topic_arn_effective | default('') | length) > 0
+
+- name: Attach SNS target to GuardDuty event rule
+  amazon.aws.cloudwatchevent_rule:
+    name: vault-guardduty-findings-notify
+    state: present
+    region: "{{ aws_region }}"
+    event_pattern: >-
+      {{
+        {
+          'source': ['aws.guardduty'],
+          'detail-type': ['GuardDuty Finding'],
+          'detail': {
+            'severity': [
+              {'numeric': ['>=', vault_guardduty_alarm_min_severity | float]}
+            ]
+          }
+        } | to_json
+      }}
+    targets:
+      - id: GuardDutyFindingsSns
+        arn: "{{ vault_security_alarm_sns_topic_arn_effective }}"
+  when:
+    - not ansible_check_mode
+    - (vault_security_alarm_sns_topic_arn_effective | default('') | length) > 0
