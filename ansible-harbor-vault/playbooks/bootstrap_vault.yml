@@ -2,33 +2,22 @@
 - hosts: localhost
   gather_facts: false
   pre_tasks:
-    - name: Load ansible-harbor-vault/.env
-      ansible.builtin.shell: |
-        python3 - <<'PY'
-        import json, os, pathlib
-        p = pathlib.Path(os.environ["ENV_FILE"])
-        d = {}
-        for line in p.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            k, _, v = line.partition("=")
-            if k:
-                d[k.strip()] = v.strip().strip('"').strip("'")
-        print(json.dumps(d))
-        PY
+    - name: Load vault_dotenv from .env file or from environment (AAP)
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
+          - "{{ playbook_dir }}/files/load_vault_dotenv.py"
       environment:
         ENV_FILE: "{{ playbook_dir }}/../.env"
       register: env_json
       changed_when: false
-      # Shell is skipped in --check by default; we need .env parsed for dry-run.
       check_mode: false
-      no_log: false
+      no_log: true
 
-    - name: Apply .env to facts
+    - name: Apply vault_dotenv to facts
       ansible.builtin.set_fact:
         vault_dotenv: "{{ env_json.stdout | from_json }}"
-      no_log: false
+      no_log: true
 
     - name: Prefer AWS_DEFAULT_REGION from .env
       ansible.builtin.set_fact:
