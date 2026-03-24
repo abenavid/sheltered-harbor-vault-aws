@@ -1,0 +1,8 @@
+---
+# Installed automatically by AWX/AAP when the project root is this repository.
+# (ansible-galaxy collection install -r collections/requirements.yml)
+collections:
+  - name: amazon.aws
+    version: ">=8.2.0"
+  - name: community.aws
+    version: ">=8.0.0"

@@ -56,7 +56,8 @@ All automation lives under **`ansible-harbor-vault/`**:
 | `ansible-harbor-vault/roles/direct_connect_gateway/` | Optional Direct Connect gateway + VGW association. |
 | `ansible-harbor-vault/roles/org_isolation/` | Optional Organizations OU + example SCP (management account). |
 | `ansible-harbor-vault/roles/time_bound_access/` | Optional Lambda + EventBridge schedules to attach/detach **VaultWriteManagedPolicy**. |
-| `ansible-harbor-vault/requirements.yml` | Ansible collection dependencies: `amazon.aws` (>= 8.2.0), `community.aws` (>= 8.0.0) for Direct Connect. |
+| `ansible-harbor-vault/requirements.yml` | Same collection pins as `collections/requirements.yml` (for local runs from `ansible-harbor-vault/`). |
+| `collections/requirements.yml` | **AWX/AAP**: `amazon.aws` (>= 8.2.0), `community.aws` (>= 8.0.0). Controller installs this when the project root is the repository root. |
 | `ansible-harbor-vault/requirements-python.txt` | Optional EE hint: **boto3>=1.42.54** for GuardDuty malware protection plan APIs. |
 | `ansible-harbor-vault/ansible.cfg` | Sets inventory path and `roles_path`. |
 
@@ -64,7 +65,7 @@ All automation lives under **`ansible-harbor-vault/`**:
 
 ## Prerequisites
 
-- Ansible with the [amazon.aws](https://github.com/ansible-collections/amazon.aws) collection installed (see `ansible-harbor-vault/requirements.yml`).
+- Ansible with [amazon.aws](https://github.com/ansible-collections/amazon.aws) and [community.aws](https://github.com/ansible-collections/community.aws) installed (see `collections/requirements.yml` at the repo root, or `ansible-harbor-vault/requirements.yml` when working only in that directory).
 - AWS credentials that can create KMS keys, S3 buckets (with Object Lock), IAM roles, CloudTrail, CloudWatch Logs/alarms, SNS, EventBridge, and GuardDuty in the target account (exact permissions depend on which optional roles you enable).
 - When **`vault_cloudtrail_cloudwatch_logs_enabled`** is true, the caller also needs **`iam:PassRole`** on the CloudTrail CloudWatch Logs role so CloudTrail can use that role. Example statement (replace account id and role name if you changed `vault_cloudtrail_cw_role_name`):
 
@@ -82,7 +83,15 @@ All automation lives under **`ansible-harbor-vault/`**:
 
 ## Configuration
 
-1. **Install collections** (from `ansible-harbor-vault/`):
+1. **Install collections**
+
+   From the repository root (matches AWX when the project root is the whole repo):
+
+   ```bash
+   ansible-galaxy collection install -r collections/requirements.yml
+   ```
+
+   Or from `ansible-harbor-vault/`:
 
    ```bash
    ansible-galaxy collection install -r requirements.yml
@@ -105,7 +114,7 @@ From `ansible-harbor-vault/`:
 ansible-playbook playbooks/bootstrap_vault.yml
 ```
 
-Optional isolation controls (after `ansible-galaxy collection install -r requirements.yml`):
+Optional isolation controls (after installing collections as above):
 
 ```bash
 ansible-playbook playbooks/bootstrap_network_isolation.yml
