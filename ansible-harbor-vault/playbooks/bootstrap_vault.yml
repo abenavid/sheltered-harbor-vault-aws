@@ -44,7 +44,7 @@
               }}
 
         - ansible.builtin.include_role:
-            name: ./roles/kms
+            name: ../roles/kms
         - ansible.builtin.include_role:
             name: s3_vault
         - ansible.builtin.include_role:
