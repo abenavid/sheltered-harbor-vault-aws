@@ -60,3 +60,5 @@
         AWS_SECRET_ACCESS_KEY: "{{ vault_dotenv.AWS_SECRET_ACCESS_KEY }}"
         AWS_SESSION_TOKEN: "{{ vault_dotenv.AWS_SESSION_TOKEN | default('') }}"
         AWS_DEFAULT_REGION: "{{ aws_region }}"
+      # Avoid printing AWS_* on the module command line when job verbosity is raised.
+      no_log: true

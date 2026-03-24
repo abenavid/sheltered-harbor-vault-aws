@@ -24,31 +24,33 @@
         aws_region: "{{ vault_dotenv.AWS_DEFAULT_REGION | default(aws_region | default('us-east-1')) }}"
 
   tasks:
-    - name: Optional organization OU/SCP (management account)
-      ansible.builtin.include_role:
-        name: org_isolation
-      when: vault_org_parent_id is defined and (vault_org_parent_id | string | trim | length) > 0
+    - name: AWS calls (vault_dotenv credentials)
+      block:
+        - name: Optional organization OU/SCP (management account)
+          ansible.builtin.include_role:
+            name: org_isolation
+          when: vault_org_parent_id is defined and (vault_org_parent_id | string | trim | length) > 0
 
-    - name: Optional VPC ingress/egress zones and endpoints
-      ansible.builtin.include_role:
-        name: network_isolation
-      when: vault_network_isolation_enabled | default(false) | bool
+        - name: Optional VPC ingress/egress zones and endpoints
+          ansible.builtin.include_role:
+            name: network_isolation
+          when: vault_network_isolation_enabled | default(false) | bool
 
-    - name: Optional Direct Connect gateway association
-      ansible.builtin.include_role:
-        name: direct_connect_gateway
-      when:
-        - vault_direct_connect_enabled | default(false) | bool
-        - vault_vgw_id is defined
-        - (vault_vgw_id | string | length) > 0
+        - name: Optional Direct Connect gateway association
+          ansible.builtin.include_role:
+            name: direct_connect_gateway
+          when:
+            - vault_direct_connect_enabled | default(false) | bool
+            - vault_vgw_id is defined
+            - (vault_vgw_id | string | length) > 0
 
-    - name: Optional EventBridge/Lambda time-bound vault writer policy
-      ansible.builtin.include_role:
-        name: time_bound_access
-      when: vault_time_bound_access | default(false) | bool
-
-  environment:
-    AWS_ACCESS_KEY_ID: "{{ vault_dotenv.AWS_ACCESS_KEY_ID }}"
-    AWS_SECRET_ACCESS_KEY: "{{ vault_dotenv.AWS_SECRET_ACCESS_KEY }}"
-    AWS_SESSION_TOKEN: "{{ vault_dotenv.AWS_SESSION_TOKEN | default('') }}"
-    AWS_DEFAULT_REGION: "{{ aws_region }}"
+        - name: Optional EventBridge/Lambda time-bound vault writer policy
+          ansible.builtin.include_role:
+            name: time_bound_access
+          when: vault_time_bound_access | default(false) | bool
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ vault_dotenv.AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "{{ vault_dotenv.AWS_SECRET_ACCESS_KEY }}"
+        AWS_SESSION_TOKEN: "{{ vault_dotenv.AWS_SESSION_TOKEN | default('') }}"
+        AWS_DEFAULT_REGION: "{{ aws_region }}"
+      no_log: true
