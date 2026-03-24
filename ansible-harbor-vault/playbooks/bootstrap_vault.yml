@@ -12,12 +12,12 @@
       register: env_json
       changed_when: false
       check_mode: false
-      no_log: true
+      no_log: false
 
     - name: Apply vault_dotenv to facts
       ansible.builtin.set_fact:
         vault_dotenv: "{{ env_json.stdout | from_json }}"
-      no_log: true
+      no_log: false
 
     - name: Prefer AWS_DEFAULT_REGION from .env
       ansible.builtin.set_fact:
@@ -46,14 +46,14 @@
         - ansible.builtin.include_role:
             name: ../roles/kms
         - ansible.builtin.include_role:
-            name: s3_vault
+            name: ../roles/s3_vault
         - ansible.builtin.include_role:
-            name: forensic_scanning
+            name: ../roles/forensic_scanning
           when: vault_forensic_scanning_enabled | default(false) | bool
         - ansible.builtin.include_role:
-            name: iam_writer
+            name: ../roles/iam_writer
         - ansible.builtin.include_role:
-            name: logging_monitoring
+            name: ../roles/logging_monitoring
           when: vault_logging_monitoring_enabled | default(false) | bool
       environment:
         AWS_ACCESS_KEY_ID: "{{ vault_dotenv.AWS_ACCESS_KEY_ID }}"
@@ -61,4 +61,4 @@
         AWS_SESSION_TOKEN: "{{ vault_dotenv.AWS_SESSION_TOKEN | default('') }}"
         AWS_DEFAULT_REGION: "{{ aws_region }}"
       # Avoid printing AWS_* on the module command line when job verbosity is raised.
-      no_log: true
+      no_log: false
