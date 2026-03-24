@@ -1,6 +1,10 @@
 ---
 - hosts: localhost
   gather_facts: false
+  # AAP/AWX often uses an inventory that is not inventories/localhost.yml, so
+  # inventory-adjacent group_vars/all.yml is never loaded. This file matches that vars.
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/group_vars/all.yml"
   pre_tasks:
     - name: Load vault_dotenv from .env file or from environment (AAP)
       ansible.builtin.command:

@@ -1,6 +1,8 @@
 ---
 - hosts: localhost
   gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/group_vars/all.yml"
   pre_tasks:
     - name: Load vault_dotenv from .env file or from environment (AAP)
       ansible.builtin.command:
