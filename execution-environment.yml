@@ -1,0 +1,36 @@
+---
+# Ansible Execution Environment (Ansible Builder 3). Edit this file to change collections,
+# Python deps, or build options. Base image must include an explicit tag.
+#
+# Build from repository root (Podman/Docker running; `podman login registry.redhat.io` first):
+#   python3 -m venv .venv-ee && source .venv-ee/bin/activate
+#   pip install 'ansible-builder>=3.1'
+#   ansible-builder build -f execution-environment.yml -t sheltered-harbor-vault-ee:latest
+#
+# Extending ee-supported-rhel9 makes ansible-builder merge pip/bindep requirements from every
+# collection already in that image; native builds can fail (add more under dependencies.exclude,
+# extra bindep packages, or use the root Containerfile for a thin boto3-only layer on the same base).
+#
+version: 3
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest
+
+dependencies:
+  ansible_core:
+    package_pip: ansible-core>=2.16
+  ansible_runner:
+    package_pip: ansible-runner>=2.3
+  galaxy: collections/requirements.yml
+  python: ansible-harbor-vault/requirements-python.txt
+  system: ee/bindep.txt
+  exclude:
+    python:
+      - systemd-python
+      - ovirt-engine-sdk-python
+
+options:
+  package_manager_path: /usr/bin/microdnf
+  tags:
+    - sheltered-harbor-vault-ee:latest

@@ -1,2 +1,6 @@
 .vscode
 ansible-harbor-vault/.env
+# ansible-builder output
+context/
+.venv-ee/
+.pah_token

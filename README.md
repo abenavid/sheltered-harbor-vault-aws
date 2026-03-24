@@ -60,6 +60,44 @@ All automation lives under **`ansible-harbor-vault/`**:
 | `collections/requirements.yml` | **AWX/AAP**: `amazon.aws` (>= 8.2.0), `community.aws` (>= 8.0.0). Controller installs this when the project root is the repository root. |
 | `ansible-harbor-vault/requirements-python.txt` | Optional EE hint: **boto3>=1.42.54** for GuardDuty malware protection plan APIs. |
 | `ansible-harbor-vault/ansible.cfg` | Sets inventory path and `roles_path`. |
+| `execution-environment.yml` | **Ansible Builder 3** definition: AAP 26 **ee-supported-rhel9** base, `collections/requirements.yml`, **ansible-core** / **ansible-runner**, **boto3** via `requirements-python.txt`, `ee/bindep.txt` (e.g. **python3-pip** for the builder stage). Adjust this file as you iterate. |
+| `ee/bindep.txt` | System packages for the EE build (bindep format); referenced from `execution-environment.yml`. |
+| `Containerfile` | **Thin alternative**: same base image, only upgrades **boto3>=1.42.54** (fast, reliable push to PAH when builder hits unrelated collection pip builds on ee-supported). |
+
+---
+
+## Execution environment (container image)
+
+You can build in two ways:
+
+**1. Ansible Builder** ([ansible-builder](https://ansible.readthedocs.io/projects/builder/) 3.1+): edit **`execution-environment.yml`** and **`ee/bindep.txt`**, then from the repo root:
+
+```bash
+podman login registry.redhat.io
+python3 -m venv .venv-ee && source .venv-ee/bin/activate
+pip install 'ansible-builder>=3.1'
+ansible-builder build -f execution-environment.yml -t sheltered-harbor-vault-ee:latest
+```
+
+**2. Containerfile** (minimal layer on the same supported base—useful if builder fails on native pip deps pulled in from other collections in the base image):
+
+```bash
+podman login registry.redhat.io
+podman build -f Containerfile -t sheltered-harbor-vault-ee:latest .
+```
+
+**Private Automation Hub:** log in to your hub’s container registry hostname (for example `podman login aap-hub-aap.apps.<cluster>.dynamic.redhatworkshops.io` as a hub user with push rights), tag, and push. This environment was pushed as:
+
+`aap-hub-aap.apps.cluster-wf7cj-1.dynamic.redhatworkshops.io/ansible/sheltered-harbor-vault-ee:latest`
+
+Use that image URL in the controller’s **Execution Environment** (or pass the same reference to [ansible-navigator](https://ansible.readthedocs.io/projects/navigator/)). `pip` may warn about **aiobotocore** vs newer **botocore**; synchronous **boto3** use in this repo is unaffected.
+
+With ansible-navigator from `ansible-harbor-vault/` (adjust the image to your registry):
+
+```bash
+ansible-navigator run playbooks/bootstrap_vault.yml \
+  --execution-environment-image aap-hub-aap.apps.cluster-wf7cj-1.dynamic.redhatworkshops.io/ansible/sheltered-harbor-vault-ee:latest
+```
 
 ---
 
