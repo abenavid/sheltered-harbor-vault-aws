@@ -29,7 +29,7 @@ The article describes **separate AWS Organizations**, **cross-account IAM**, **D
 
 ### Forensic scanning of data
 
-The article mentions **GuardDuty Malware Protection for S3** and partner scanners. When `vault_forensic_scanning_enabled` is true, the `forensic_scanning` role enables **Malware Protection for S3** on the vault bucket (IAM role, malware protection plan, optional EventBridge→SNS and partner read role). Third-party scanners and org-wide policy remain your responsibility.
+The article mentions **GuardDuty Malware Protection for S3** and partner scanners. When `vault_forensic_scanning_enabled` is true, the `forensic_scanning` role enables **Malware Protection for S3** on the vault bucket (IAM role, malware protection plan, optional EventBridge→SNS and partner read role). Third-party scanners and org-wide policy remain your responsibility. **Malware protection plan creation** calls AWS `CreateMalwareProtectionPlan`, which requires **boto3 ≥ 1.42.54**; the role runs `pip install --user 'boto3>=1.42.54'` for the playbook Python unless you set `vault_forensic_scanning_upgrade_boto3: false` (then bake `ansible-harbor-vault/requirements-python.txt` into your execution environment).
 
 ### Operational assurance (logging and monitoring)
 
@@ -57,6 +57,7 @@ All automation lives under **`ansible-harbor-vault/`**:
 | `ansible-harbor-vault/roles/org_isolation/` | Optional Organizations OU + example SCP (management account). |
 | `ansible-harbor-vault/roles/time_bound_access/` | Optional Lambda + EventBridge schedules to attach/detach **VaultWriteManagedPolicy**. |
 | `ansible-harbor-vault/requirements.yml` | Ansible collection dependencies: `amazon.aws` (>= 8.2.0), `community.aws` (>= 8.0.0) for Direct Connect. |
+| `ansible-harbor-vault/requirements-python.txt` | Optional EE hint: **boto3>=1.42.54** for GuardDuty malware protection plan APIs. |
 | `ansible-harbor-vault/ansible.cfg` | Sets inventory path and `roles_path`. |
 
 ---

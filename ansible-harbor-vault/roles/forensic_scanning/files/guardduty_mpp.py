@@ -53,7 +53,15 @@ def cmd_create(region: str, role_arn: str, protected_json: str, tagging_enabled:
     protected = json.loads(protected_json)
     status = "ENABLED" if tagging_enabled else "DISABLED"
     client = boto3.client("guardduty", region_name=region)
-    client.create_malware_protection_plan(
+    create = getattr(client, "create_malware_protection_plan", None)
+    if create is None:
+        print(
+            "This boto3 is too old: guardduty client has no create_malware_protection_plan. "
+            "Install boto3>=1.42.54 (e.g. pip install --user 'boto3>=1.42.54') or use a newer execution environment.",
+            file=sys.stderr,
+        )
+        return 2
+    create(
         Role=role_arn,
         ProtectedResource=protected,
         Actions={"Tagging": {"Status": status}},

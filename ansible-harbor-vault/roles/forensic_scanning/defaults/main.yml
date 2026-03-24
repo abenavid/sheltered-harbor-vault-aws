@@ -2,6 +2,10 @@
 # Enable via vault_forensic_scanning_enabled in inventories/group_vars/all.yml (playbook include).
 # GuardDuty Malware Protection for S3 (independent of full GuardDuty detector). See:
 # https://docs.aws.amazon.com/guardduty/latest/ug/enable-malware-protection-s3-bucket.html
+#
+# CreateMalwareProtectionPlan needs boto3>=1.42.54 (botocore service model). AWX/AAP default EEs
+# may ship older boto3; the role upgrades via pip unless disabled (prefer baking boto3>=1.42.54 into your EE).
+vault_forensic_scanning_upgrade_boto3: true
 vault_guardduty_malware_role_name: GuardDutyVaultS3MalwareScanRole
 # Post-scan object tag GuardDutyMalwareScanStatus (standard S3 tagging charges apply)
 vault_guardduty_s3_tagging_enabled: true

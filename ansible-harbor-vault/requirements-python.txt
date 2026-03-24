@@ -1,0 +1,4 @@
+# Optional: add to your Ansible Execution Environment image so GuardDuty Malware Protection
+# helpers (roles/forensic_scanning/files/guardduty_mpp.py) work without a runtime pip install.
+# Minimum for CreateMalwareProtectionPlan on the guardduty client:
+boto3>=1.42.54
