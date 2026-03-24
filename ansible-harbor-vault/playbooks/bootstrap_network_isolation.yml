@@ -9,7 +9,7 @@
         aws_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default(aws_region | default('us-east-1')) }}"
 
   tasks:
-    - name: AWS calls (vault_dotenv credentials)
+    - name: AWS calls (vault credentials environment variables)
       block:
         - name: Optional organization OU/SCP (management account)
           ansible.builtin.include_role:
@@ -20,14 +20,6 @@
           ansible.builtin.include_role:
             name: network_isolation
           when: vault_network_isolation_enabled | default(false) | bool
-
-        - name: Optional Direct Connect gateway association
-          ansible.builtin.include_role:
-            name: direct_connect_gateway
-          when:
-            - vault_direct_connect_enabled | default(false) | bool
-            - vault_vgw_id is defined
-            - (vault_vgw_id | string | length) > 0
 
         - name: Optional EventBridge/Lambda time-bound vault writer policy
           ansible.builtin.include_role:
