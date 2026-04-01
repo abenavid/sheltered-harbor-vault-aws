@@ -1,9 +1,4 @@
 ---
-- name: Install aws cli tool
-  ansible.builtin.yum:
-    name: awscli
-    state: present
-
 - name: Create logically air-gapped Backup Vault
   ansible.builtin.command:
     argv:
