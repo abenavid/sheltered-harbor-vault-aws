@@ -4,29 +4,12 @@
   vars_files:
     - "{{ playbook_dir }}/../inventories/group_vars/all.yml"
   pre_tasks:
-    - name: Load vault_dotenv from .env file or from environment (AAP)
-      ansible.builtin.command:
-        argv:
-          - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
-          - "{{ playbook_dir }}/files/load_vault_dotenv.py"
-      environment:
-        ENV_FILE: "{{ playbook_dir }}/../.env"
-      register: env_json
-      changed_when: false
-      check_mode: false
-      no_log: false
-
-    - name: Apply vault_dotenv to facts
+    - name: Prefer AWS_DEFAULT_REGION environment variable
       ansible.builtin.set_fact:
-        vault_dotenv: "{{ env_json.stdout | from_json }}"
-      no_log: false
-
-    - name: Prefer AWS_DEFAULT_REGION from .env
-      ansible.builtin.set_fact:
-        aws_region: "{{ vault_dotenv.AWS_DEFAULT_REGION | default(aws_region | default('us-east-1')) }}"
+        aws_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default(aws_region | default('us-east-1')) }}"
 
   tasks:
-    - name: AWS calls (vault_dotenv credentials)
+    - name: AWS calls (vault credentials environment variables)
       block:
         - name: Optional organization OU/SCP (management account)
           ansible.builtin.include_role:
@@ -38,21 +21,13 @@
             name: network_isolation
           when: vault_network_isolation_enabled | default(false) | bool
 
-        - name: Optional Direct Connect gateway association
-          ansible.builtin.include_role:
-            name: direct_connect_gateway
-          when:
-            - vault_direct_connect_enabled | default(false) | bool
-            - vault_vgw_id is defined
-            - (vault_vgw_id | string | length) > 0
-
         - name: Optional EventBridge/Lambda time-bound vault writer policy
           ansible.builtin.include_role:
             name: time_bound_access
           when: vault_time_bound_access | default(false) | bool
       environment:
-        AWS_ACCESS_KEY_ID: "{{ vault_dotenv.AWS_ACCESS_KEY_ID }}"
-        AWS_SECRET_ACCESS_KEY: "{{ vault_dotenv.AWS_SECRET_ACCESS_KEY }}"
-        AWS_SESSION_TOKEN: "{{ vault_dotenv.AWS_SESSION_TOKEN | default('') }}"
+        AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+        AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+        AWS_SESSION_TOKEN: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('') }}"
         AWS_DEFAULT_REGION: "{{ aws_region }}"
       no_log: false
