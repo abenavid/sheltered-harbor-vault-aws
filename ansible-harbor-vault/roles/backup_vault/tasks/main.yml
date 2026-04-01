@@ -1,4 +1,8 @@
 ---
+- name: Test aws
+  ansible.builtin.command:
+    cmd: aws --version
+
 - name: Create logically air-gapped Backup Vault
   ansible.builtin.command:
     argv:
