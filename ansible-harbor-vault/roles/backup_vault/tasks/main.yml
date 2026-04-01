@@ -3,6 +3,7 @@
   ansible.builtin.dnf:
     name: awscli
     state: present
+    use_backend: dnf4
   become: true
 
 - name: Create logically air-gapped Backup Vault
