@@ -1,6 +1,6 @@
 ---
 - name: Install aws cli tool
-  ansible.builtin.ymu:
+  ansible.builtin.yum:
     name: awscli
     state: present
 
