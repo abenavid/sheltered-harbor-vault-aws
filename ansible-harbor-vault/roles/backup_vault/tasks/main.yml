@@ -1,10 +1,8 @@
 ---
 - name: Install aws cli tool
-  ansible.builtin.dnf:
+  ansible.builtin.ymu:
     name: awscli
     state: present
-    use_backend: dnf4
-  become: true
 
 - name: Create logically air-gapped Backup Vault
   ansible.builtin.command:
