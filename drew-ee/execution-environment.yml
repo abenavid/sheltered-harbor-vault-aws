@@ -12,7 +12,6 @@ dependencies:
     package_pip: ansible-core~=2.18
   ansible_runner:
     package_pip: ansible-runner~=2.4
-  system:
-  - awscli
+  system: ee/bindep.txt
   galaxy: requirements.yml
   python: requirements.txt
