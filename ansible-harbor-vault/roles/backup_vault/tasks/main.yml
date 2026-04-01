@@ -1,11 +1,11 @@
 ---
 - name: Install aws cli tool
-  ansible-builtin.dnf:
+  ansible.builtin.dnf:
     name: awscli
     state: present
 
 - name: Create logically air-gapped Backup Vault
-  ansible-builtin.command:
+  ansible.builtin.command:
     argv:
     - aws backup create-logically-air-gapped-backup-vault
     - --region {{ aws_region }}
