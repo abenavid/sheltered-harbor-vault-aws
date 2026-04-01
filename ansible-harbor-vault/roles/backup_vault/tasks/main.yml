@@ -3,11 +3,11 @@
   ansible.builtin.command:
     argv:
     - aws backup create-logically-air-gapped-backup-vault
-    - --region {{ aws_region }}
+    - "{{ --region aws_region }}"
     - --backup-vault-name sampleName
     - --min-retention-days 7
     - --max-retention-days 35
-    - --encryption-key-arn {{ vault_kms_key_arn }}
+    - "{{--encryption-key-arn vault_kms_key_arn }}"
   delegate_to: localhost
   register: create_vault_response
 
