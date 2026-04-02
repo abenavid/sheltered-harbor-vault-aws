@@ -10,7 +10,7 @@
 
 - name: Create logically air-gapped Backup Vault
   ansible.builtin.shell: |
-    aws backup create-backup-plan --backup-plan {{ backup_yaml }} --region {{ aws_region }}
+    aws backup create-backup-plan --region {{ aws_region }} --cli-input-yaml {{ backup_yaml }}
   delegate_to: localhost
 
 
