@@ -1,5 +1,5 @@
 ---
-backup_json:
+backup_yaml:
   BackupPlan:
     BackupPlanName: "{{ backup_plan_name }}"
     Rules:

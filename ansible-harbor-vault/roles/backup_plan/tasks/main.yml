@@ -8,20 +8,9 @@
     #   register: vault_result
     #   # This task is idempotent, it only creates the vault if it doesn't exist.
 
-- name: Set fact for backup_plan json
-  ansible.builtin.set_fact:
-    backup_json: "{{ backup_json | to_json }}"
-
-- name: Debug new var
-  ansible.builtin.debug:
-    var: backup_json
-
 - name: Create logically air-gapped Backup Vault
-  ansible.builtin.shell: >
-    aws backup create-backup-plan
-    --backup-plan {{ backup_plan_name }}
-    --region {{ aws_region }}
-    --cli-input-json {{ backup_json }}
+  ansible.builtin.shell: |
+    aws backup create-backup-plan --backup-plan {{ backup_plan_name }} --region {{ aws_region }} --cli-input-yaml {{ backup_yaml }}
   delegate_to: localhost
 
 
