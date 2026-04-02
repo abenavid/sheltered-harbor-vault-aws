@@ -10,7 +10,7 @@
 
 - name: Debug
   ansible.builtin.debug: 
-    var: backup_rule_schedule
+    var: backup_rule_schedule | to_json
 
 - name: Create logically air-gapped Backup Vault
   ansible.builtin.command: >
