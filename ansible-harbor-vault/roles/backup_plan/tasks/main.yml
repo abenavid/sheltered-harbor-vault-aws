@@ -14,7 +14,7 @@
         state: present
         rules:
           - rule_name: "{{ backup_rule_name }}"
-            target_vault_name: "{{ backup_vault_name }}"
+            target_backup_vault_name: "{{ backup_vault_name }}"
             # Schedule a daily backup using a cron expression (e.g., 5 AM UTC daily)
             schedule_expression: "{{ backup_rule_schedule }}"
             # Lifecycle: move to cold storage after 30 days, delete after 90 days
