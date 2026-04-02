@@ -17,7 +17,7 @@
     var: backup_json
 
 - name: Create logically air-gapped Backup Vault
-  ansible.builtin.command: >-
+  ansible.builtin.shell: |
     aws backup create-backup-plan
     --region {{ aws_region }}
     --cli-input-json "{{ backup_json }}"
