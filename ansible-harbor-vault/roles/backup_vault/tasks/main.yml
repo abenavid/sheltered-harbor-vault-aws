@@ -28,3 +28,8 @@
 - name: Set the ARN (Amazon Resource Name) of the vault
   ansible.builtin.set_fact:
     vault_arn: "{{ vault_info.BackupVaultArn }}"
+
+- name: Set values to pass to workflow
+  ansible.builtin.set_stats:
+    data:
+      backup_vault_arn: "{{ vault_arn }}"
