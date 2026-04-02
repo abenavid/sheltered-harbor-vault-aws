@@ -7,7 +7,7 @@ BackupPlan:
     StartWindowMinutes: 100
     CompletionWindowMinutes: 5000
     Lifecycle:
-      DeleteAfterDays: "{{ backup_delete_after_days }}"
+      DeleteAfterDays: '{{ backup_delete_after_days | int }}'
       OptInToArchiveForSupportedResources: true
     # RecoveryPointTags:
     #   key1: foo
