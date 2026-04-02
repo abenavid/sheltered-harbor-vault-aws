@@ -33,3 +33,4 @@
   ansible.builtin.set_stats:
     data:
       backup_vault_arn: "{{ vault_arn }}"
+      backup_vault_name: "{{ vault_name }}"
