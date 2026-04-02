@@ -15,3 +15,9 @@ dependencies:
   system: ee/bindep.txt
   galaxy: requirements.yml
   python: requirements.txt
+
+additional_build_steps:
+  prepend_final: 
+    - RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    - RUN unzip awscliv2.zip
+    - RUN sudo ./aws/install
