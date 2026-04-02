@@ -18,9 +18,13 @@
     aws backup describe-backup-vault
     --region {{ aws_region }}
     --backup-vault-name {{ vault_name }}
-  register: vault_info
+  register: vault_response
   no_log: true
+
+- name: Set vault info variable
+  ansible.builtin.set_fact:
+    vault_info: "{{ vault_response.stdout | from_json }}"
 
 - name: Set the ARN (Amazon Resource Name) of the vault
   ansible.builtin.set_fact:
-    vault_arn: "{{ vault_info.stdout.BackupVaultArn }}"
+    vault_arn: "{{ vault_info.BackupVaultArn }}"
