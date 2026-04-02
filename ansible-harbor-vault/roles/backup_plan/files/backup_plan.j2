@@ -3,6 +3,7 @@ BackupPlan:
   Rules:
   - RuleName: incremental
     TargetBackupVaultName: {{ backup_vault_name }}
+    "TargetLogicallyAirGappedBackupVaultArn": "{{ backup_vault_arn }}"
     ScheduleExpression: "{{ backup_rule_schedule }}"
     StartWindowMinutes: 100
     CompletionWindowMinutes: 5000
