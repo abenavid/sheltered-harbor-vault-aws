@@ -8,6 +8,9 @@
     #   register: vault_result
     #   # This task is idempotent, it only creates the vault if it doesn't exist.
 
+- name: Debug
+  ansible.builtin.debug: "{{ backup_rule_schedule }}"
+
 - name: Create logically air-gapped Backup Vault
   ansible.builtin.command: >
     aws backup create-backup-plan
