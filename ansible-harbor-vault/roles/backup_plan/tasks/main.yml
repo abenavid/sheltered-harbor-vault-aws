@@ -9,7 +9,7 @@
     #   # This task is idempotent, it only creates the vault if it doesn't exist.
 
 - name: Create logically air-gapped Backup Vault
-  ansible.builtin.command: |
+  ansible.builtin.command: >-
     aws backup create-backup-plan
     --region {{ aws_region }}
     --cli-input-json "{{ backup_json | to_json }}"
