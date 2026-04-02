@@ -8,9 +8,15 @@
     #   register: vault_result
     #   # This task is idempotent, it only creates the vault if it doesn't exist.
 
+- name: Create yaml file on localhost
+  ansible.builtin.template:
+    src: files/backup_plan.yml
+    dest: files/backup_plan.yml
+  delegate_to: localhost
+
 - name: Create logically air-gapped Backup Vault
   ansible.builtin.shell: |
-    aws backup create-backup-plan --region {{ aws_region }} --cli-input-yaml file://./files/backup_plan.yml
+    aws backup create-backup-plan --region {{ aws_region }} --cli-input-yaml file://files/backup_plan.yml
   delegate_to: localhost
 
 
