@@ -10,7 +10,7 @@
 
     - name: Create/Update the AWS Backup Plan
       amazon.aws.backup_plan:
-        plan_name: "{{ backup_plan_name }}"
+        backup_plan_name: "{{ backup_plan_name }}"
         state: present
         rules:
           - rule_name: "{{ backup_rule_name }}"
