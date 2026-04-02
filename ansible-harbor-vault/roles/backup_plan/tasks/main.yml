@@ -19,10 +19,8 @@
             schedule_expression: "{{ backup_rule_schedule }}"
             # Lifecycle: move to cold storage after 30 days, delete after 90 days
             lifecycle:
-              cold_storage_after_days: "{{ backup_cold_storage_days }}"
+              move_to_cold_storage_after_days: "{{ backup_cold_storage_days }}"
               delete_after_days: "{{ backup_delete_after_days }}"
-            # Define an IAM role for AWS Backup to assume
-            iam_role_arn: "{{ backup_iam_role }}" # Replace with your actual IAM Role ARN
       register: plan_result
       # The IAM role for AWS Backup (AWSBackupDefaultServiceRole) needs permissions
       # to perform backup operations on your behalf.
