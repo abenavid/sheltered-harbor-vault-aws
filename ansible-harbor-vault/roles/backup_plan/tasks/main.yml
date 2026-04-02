@@ -14,6 +14,11 @@
     dest: files/backup_plan.yml
   delegate_to: localhost
 
+- name: Debug file
+  ansible.builtin.debug:
+    msg: "{{ lookup('file', 'files/backup_plan.yml') }}"
+  delegate_to: localhost
+
 - name: Create logically air-gapped Backup Vault
   ansible.builtin.shell: |
     aws backup create-backup-plan --region {{ aws_region }} --cli-input-yaml file://files/backup_plan.yml
