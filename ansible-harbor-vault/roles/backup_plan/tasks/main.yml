@@ -12,7 +12,7 @@
   ansible.builtin.command: >
     aws backup create-backup-plan
     --region {{ aws_region }}
-    --cli-input-json "{{ lookup('file', 'backup_plan.yml' | to_json ) }}"
+    --cli-input-json "{{ backup_json | to_json }}"
   delegate_to: localhost
 
 
