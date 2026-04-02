@@ -1,13 +1,13 @@
 BackupPlan:
-  BackupPlanName: "{{ backup_plan_name }}"
+  BackupPlanName: {{ backup_plan_name }}
   Rules:
   - RuleName: incremental
-    TargetBackupVaultName: "{{ backup_vault_name }}"
+    TargetBackupVaultName: {{ backup_vault_name }}
     ScheduleExpression: "{{ backup_rule_schedule }}"
     StartWindowMinutes: 100
     CompletionWindowMinutes: 5000
     Lifecycle:
-      DeleteAfterDays: '{{ backup_delete_after_days | int }}'
+      DeleteAfterDays: {{ backup_delete_after_days | int }}
       OptInToArchiveForSupportedResources: true
     # RecoveryPointTags:
     #   key1: foo
@@ -20,4 +20,4 @@ BackupPlan:
   - MalwareScanner: GUARDDUTY
     ResourceTypes:
     - S3
-    ScannerRoleArn: "{{ backup_iam_role }}"
+    ScannerRoleArn: {{ backup_iam_role }}

@@ -10,7 +10,7 @@
 
 - name: Create yaml file on localhost
   ansible.builtin.template:
-    src: files/backup_plan.yml
+    src: files/backup_plan.j2
     dest: backup_plan.yml
   delegate_to: localhost
 
