@@ -1,6 +1,7 @@
 ---
 backup_plan_name: TestBackupPlanAutomated
 backup_rule_name: Daily-Rule
+backup_resource_name: Demo_Resource
 backup_rule_schedule: cron(0 5 * * ? *)
 backup_cold_storage_days: 30
 backup_delete_after_days: 30

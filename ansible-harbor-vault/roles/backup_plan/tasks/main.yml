@@ -28,17 +28,17 @@
       # The IAM role for AWS Backup (AWSBackupDefaultServiceRole) needs permissions
       # to perform backup operations on your behalf.
 
-    # - name: Assign resources to the backup plan using tags
-    #   amazon.aws.backup_selection:
-    #     plan_name: "{{ backup_plan_name }}"
-    #     selection_name: "MyResourceSelection"
-    #     iam_role_arn: "{{ backup_iam_role }}" # Must be the same role
-    #     resources:
-    #       - "arn:aws:ec2:us-east-1:123456789012:instance/i-0abcdef1234567890" # Example instance ARN
-    #     # Alternatively, use tags to dynamically select resources:
-    #     # selection_tags:
-    #     #   - condition_type: "STRINGEQUALS"
-    #     #     key: "Environment"
-    #     #     value: "Production"
-    #     state: present
-    #   register: selection_result
+- name: Assign resources to the backup plan using tags
+  amazon.aws.backup_selection:
+    plan_name: "{{ backup_plan_name }}"
+    selection_name: "{{ backup_resource_name }}"
+    iam_role_arn: "{{ backup_iam_role }}" # Must be the same role
+    resources:
+      - "{{ backup_resource_arn }}" # Example instance ARN
+    # Alternatively, use tags to dynamically select resources:
+    # selection_tags:
+    #   - condition_type: "STRINGEQUALS"
+    #     key: "Environment"
+    #     value: "Production"
+    state: present
+  register: selection_result
