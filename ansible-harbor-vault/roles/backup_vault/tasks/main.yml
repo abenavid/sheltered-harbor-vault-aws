@@ -35,5 +35,5 @@
     rescue:
       - name: Log failure message
         ansible.builtin.debug:
-          msg: "Task {{ ansible_failed_task }} failed with the following message {{ ansible_failed_result }}"
+          msg: "Task {{ ansible_failed_task.name }} failed with the following message {{ ansible_failed_result.stderr }}"
 
