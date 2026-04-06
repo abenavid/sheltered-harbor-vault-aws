@@ -1,35 +1,39 @@
 ---
-- name: Test aws
-  ansible.builtin.command:
-    cmd: aws --version
+  - name: Tasks to create air-gapped vault
+    block:
+      - name: Create logically air-gapped Backup Vault
+        ansible.builtin.command: >
+          aws backup create-logically-air-gapped-backup-vault
+          --region {{ aws_region }}
+          --backup-vault-name {{ vault_name }}
+          --min-retention-days {{ min_retention_days }}
+          --max-retention-days {{ max_retention_days }}
+          --encryption-key-arn {{ vault_kms_key_arn }}
+        register: vault_creation_response
+        delegate_to: localhost
 
-- name: Create logically air-gapped Backup Vault
-  ansible.builtin.command: >
-    aws backup create-logically-air-gapped-backup-vault
-    --region {{ aws_region }}
-    --backup-vault-name {{ vault_name }}
-    --min-retention-days 7
-    --max-retention-days 35
-    --encryption-key-arn {{ vault_kms_key_arn }}
-  delegate_to: localhost
+      - name: Get Vault Info
+        ansible.builtin.command: >  
+          aws backup describe-backup-vault
+          --region {{ aws_region }}
+          --backup-vault-name {{ vault_name }}
+        register: vault_response
+        no_log: true
 
-- name: Get Vault Info
-  ansible.builtin.command: >  
-    aws backup describe-backup-vault
-    --region {{ aws_region }}
-    --backup-vault-name {{ vault_name }}
-  register: vault_response
-  no_log: true
+      - name: Set vault info variable
+        ansible.builtin.set_fact:
+          vault_info: "{{ vault_response.stdout | from_json }}"
 
-- name: Set vault info variable
-  ansible.builtin.set_fact:
-    vault_info: "{{ vault_response.stdout | from_json }}"
+      - name: Set the ARN (Amazon Resource Name) of the vault
+        ansible.builtin.set_fact:
+          vault_arn: "{{ vault_info.BackupVaultArn }}"
 
-- name: Set the ARN (Amazon Resource Name) of the vault
-  ansible.builtin.set_fact:
-    vault_arn: "{{ vault_info.BackupVaultArn }}"
+      - name: Set values to pass to workflow
+        ansible.builtin.set_stats:
+          data:
+            backup_vault_arn: "{{ vault_arn }}"
+    rescue:
+      - name: Log failure message
+        ansible.builtin.debug:
+          msg: "Task {{ ansible_failed_task }} failed with the following message {{ ansible_failed_result }}"
 
-- name: Set values to pass to workflow
-  ansible.builtin.set_stats:
-    data:
-      backup_vault_arn: "{{ vault_arn }}"
