@@ -1,3 +1,10 @@
 ---
 min_retention_days: 7
 max_retention_days: 35
+aws_backup_base_url: "https://backup.{{ aws_region }}.amazonaws.com"
+
+
+
+
+
+#https://backup.us-east-2.amazonaws.com/logically-air-gapped-backup-vaults/test7-vault

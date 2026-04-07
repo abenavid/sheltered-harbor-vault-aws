@@ -14,7 +14,7 @@
 
       - name: Create logically air-gapped Backup Vault
         ansible.builtin.uri:
-          url: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
+          url: "{{ aws_backup_base_url }}/logically-air-gapped-backup-vaults/{{ vault_name }}"
           method: PUT
           body: "{{ create_vault_request | to_json }}"
           force_basic_auth: false
