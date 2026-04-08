@@ -3,11 +3,12 @@ import hashlib
 import hmac
 import requests
 import os
+import json
 
 # AWS access keys
 access_key = os.environ['AWS_ACCESS_KEY_ID']
 secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
-session_token = os.environ['AWS_SESSION_TOKEN']
+session_token = "{{ aws_session_token }}"
 
 # Request parameters
 method = "{{ backup_http_method }}"
@@ -55,8 +56,8 @@ authorization_header = (algorithm + ' ' + 'Credential=' + access_key + '/' + cre
                         'SignedHeaders=' + signed_headers + ', ' + 'Signature=' + signature)
 
 # Make the headers
-headers = {"Host": '"' + host + '"' ,
-           "x_amz_date": '"' + amzdate + '"',
-           "x_amz_security_token": '"' + session_token + '"',
-           "Authorization": '"' + authorization_header + '"'}
-print(headers)
+headers = {"Host": host,
+           "x_amz_date": amzdate,
+           "x_amz_security_token": session_token,
+           "Authorization": authorization_header}
+print(json.dumps(headers))
