@@ -41,7 +41,7 @@
         ansible.builtin.set_fact:
           host: "{{ auth_response_info.Host }}"
           x_amz_date: "{{ auth_response_info.x_amz_date }}"
-          x_amz_security_token: "{{ auth_response_info.x_amz_security-token }}"
+          x_amz_security_token: "{{ auth_response_info.x_amz_security_token }}"
           Authorization: "{{ auth_response_info.Authorization }}"
 
       - name: Create logically air-gapped Backup Vault
