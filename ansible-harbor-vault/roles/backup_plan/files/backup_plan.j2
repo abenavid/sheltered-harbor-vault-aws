@@ -17,6 +17,11 @@ BackupPlan:
     ScanActions:
     - MalwareScanner: GUARDDUTY
       ScanMode: INCREMENTAL_SCAN
+    # CopyActions:
+    #   Lifecycle:
+    #     DeleteAfterDays: {{ backup_delete_after_days | int }}
+    #     OptInToArchiveForSupportedResources: true
+    #   DestinationBackupVaultArn: {{ secondary_backup_vault_arn }}
   ScanSettings:
   - MalwareScanner: GUARDDUTY
     ResourceTypes:
