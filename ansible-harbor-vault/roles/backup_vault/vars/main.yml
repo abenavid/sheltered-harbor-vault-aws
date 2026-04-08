@@ -3,4 +3,3 @@ create_vault_request:
   EncryptionKeyArn: "{{ vault_kms_key_arn }}"
   MaxRetentionDays: "{{ max_retention_days | int }}"
   MinRetentionDays: "{{ min_retention_days | int }}"
-  Region: "{{ aws_region }}"

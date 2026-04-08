@@ -1,58 +1,82 @@
 ---
   - name: Tasks to create air-gapped vault
     block:
-      - name: Create logically air-gapped Backup Vault
-        ansible.builtin.command: >
-          aws backup create-logically-air-gapped-backup-vault
-          --region {{ aws_region }}
-          --backup-vault-name {{ vault_name }}
-          --min-retention-days {{ min_retention_days }}
-          --max-retention-days {{ max_retention_days }}
-          --encryption-key-arn {{ vault_kms_key_arn }}
-        register: vault_creation_response
-        delegate_to: localhost
-
-#      - name: Get Session Token
-#        ansible.builtin.command: >
-#          aws sts get-session-token
-#        register: session_token_response
-#        delegate_to: localhost
-#        no_log: true
-
-#      - name: Set Session Token Info variable
-#        ansible.builtin.set_fact:
-#          session_token_info: "{{ session_token_response.stdout | from_json }}"
-#
 #      - name: Create logically air-gapped Backup Vault
-#        ansible.builtin.uri:
-#          url: "{{ aws_backup_base_url }}/logically-air-gapped-backup-vaults/{{ vault_name }}"
-#          method: PUT
-#          headers:
-#            x-amz-security-token: "{{ session_token_info.Credentials.SessionToken }}"
-#          body: "{{ create_vault_request | to_json }}"
-#          force_basic_auth: false
-#          status_code: 200
-#          body_format: json
-#          use_proxy: false
-#          validate_certs: false
+#        ansible.builtin.command: >
+#          aws backup create-logically-air-gapped-backup-vault
+#          --region {{ aws_region }}
+#          --backup-vault-name {{ vault_name }}
+#          --min-retention-days {{ min_retention_days }}
+#          --max-retention-days {{ max_retention_days }}
+#          --encryption-key-arn {{ vault_kms_key_arn }}
 #        register: vault_creation_response
 #        delegate_to: localhost
 
-      - name: Get Vault Info
-        ansible.builtin.command: >
-          aws backup describe-backup-vault
-          --region {{ aws_region }}
-          --backup-vault-name {{ vault_name }}
-        register: vault_response
-        no_log: true
+      - name: Set endpoint and http method
+        ansible.builtin.set_fact:
+          backup_endpoint: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
+          backup_http_method: "PUT"
+
+      - name: Create auth.py python script on localhost
+        ansible.builtin.template:
+          src: files/auth.py.j2
+          dest: auth.py
+          mode: '0644'
+        delegate_to: localhost
+
+      - name: Get Signed Headers for http request
+        ansible.builtin.command:
+          argv:
+            - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
+            - "auth.py"
+        register: auth_response
+        changed_when: auth_response.rc == 0
+        when: not ansible_check_mode
+
+      - name: Set auth response info variable
+        ansible.builtin.set_fact:
+          auth_response_info: "{{ auth_response.stdout | from_json }}"
+
+      - name: Set header facts
+        ansible.builtin.set_fact:
+          host: "{{ auth_response_info.Host }}"
+          x_amz_date: "{{ auth_response_info.x_amz_date }}"
+          x_amz_security_token: "{{ auth_response_info.x_amz_security-token }}"
+          Authorization: "{{ auth_response_info.Authorization }}"
+
+      - name: Create logically air-gapped Backup Vault
+        ansible.builtin.uri:
+          url: "{{ aws_backup_base_url }}{{ backup_endpoint }}"
+          method: "{{ backup_http_method }}"
+          headers:
+            host: "{{ host }}"
+            x-amz-date: "{{ x_amz_date }}"
+            x-amz-security-token: "{{ x_amz_security_token }}"
+            Authorization: "{{ Authorization }}"
+          body: "{{ create_vault_request | to_json }}"
+          force_basic_auth: false
+          status_code: 200
+          body_format: json
+          use_proxy: false
+          validate_certs: false
+        register: vault_creation_response
+        delegate_to: localhost
+
+#      - name: Get Vault Info
+#        ansible.builtin.command: >
+#          aws backup describe-backup-vault
+#          --region {{ aws_region }}
+#          --backup-vault-name {{ vault_name }}
+#        register: vault_response
+#        no_log: true
+#
+#      - name: Set vault info variable
+#        ansible.builtin.set_fact:
+#          vault_info: "{{ vault_response.stdout | from_json }}"
 
       - name: Set vault info variable
         ansible.builtin.set_fact:
-          vault_info: "{{ vault_response.stdout | from_json }}"
-
-#      - name: Set vault info variable
-#        ansible.builtin.set_fact:
-#          vault_info: "{{ vault_creation_response.json | from_json }}"
+          vault_info: "{{ vault_creation_response.json | from_json }}"
 
       - name: Set the ARN (Amazon Resource Name) of the vault
         ansible.builtin.set_fact:
