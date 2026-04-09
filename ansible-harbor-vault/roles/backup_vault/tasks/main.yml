@@ -40,12 +40,6 @@
           request_payload: "{{ create_vault_request | to_json }}"
         no_log: true
 
-      - name: Set Session Token ENV var
-        ansible.builtin.command:
-          argv:
-            "export AWS_SESSION_TOKEN={{ aws_session_token }}"
-        delegate_to: localhost
-
       - name: Create auth.py python script on localhost
         ansible.builtin.template:
           src: files/auth.py.j2
@@ -90,6 +84,8 @@
           body_format: json
           use_proxy: false
           validate_certs: true
+        environment:
+          AWS_SESSION_TOKEN: "{{ aws_session_token }}"
         register: vault_creation_response
         delegate_to: localhost
 
