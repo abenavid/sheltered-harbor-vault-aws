@@ -43,7 +43,7 @@
         register: auth_response
         changed_when: auth_response.rc == 0
         when: not ansible_check_mode
-        no_log: true
+        no_log: false
 
       - name: Set auth response info variable
         ansible.builtin.set_fact:
