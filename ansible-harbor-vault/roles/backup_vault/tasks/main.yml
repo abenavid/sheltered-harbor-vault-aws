@@ -12,14 +12,14 @@
 #        register: vault_creation_response
 #        delegate_to: localhost
 
-#      - name: Get a session token
-#        community.aws.sts_session_token:
-#          access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
-#          secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
-#          duration_seconds: 3600
-#        register: session_credentials
-#        delegate_to: localhost
-#        no_log: true
+      - name: Get a session token
+        community.aws.sts_session_token:
+          access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+          secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+          duration_seconds: 3600
+        register: session_credentials
+        delegate_to: localhost
+        no_log: true
 
 #      - name: Get Session Token
 #        ansible.builtin.command: >
@@ -35,8 +35,7 @@
         ansible.builtin.set_fact:
           backup_endpoint: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
           backup_http_method: "PUT"
-#          aws_session_token: "{{ session_credentials.sts_creds.session_token }}"
-          aws_session_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('') }}"
+          aws_session_token: "{{ session_credentials.sts_creds.session_token }}"
           request_payload: "{{ create_vault_request | to_json }}"
         no_log: true
 
