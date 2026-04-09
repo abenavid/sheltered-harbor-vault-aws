@@ -16,6 +16,7 @@
         community.aws.sts_session_token:
           access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
           secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+          duration_seconds: 3600
         register: session_credentials
         delegate_to: localhost
         no_log: true
