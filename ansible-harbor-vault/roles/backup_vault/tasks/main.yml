@@ -12,18 +12,23 @@
 #        register: vault_creation_response
 #        delegate_to: localhost
 
-      - name: Get a session token
-        community.aws.sts_session_token:
+#      - name: Get a session token
+#        community.aws.sts_session_token:
+#          access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+#          secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+#          duration_seconds: 3600
+#        register: session_credentials
+#        delegate_to: localhost
+#        no_log: true
+
+      - name: Get session token
+        amazon.aws.sts_assume_role:
           access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
           secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
-          duration_seconds: 3600
+          role_arn: "{{ aws_caller.arn }"
+          role_session_name: "apiAccess"
         register: session_credentials
         delegate_to: localhost
-        no_log: true
-
-      - name: Show aws values
-        debug:
-          msg: "AWS ENV:  {{ lookup('env', 'AWS_ACCESS_KEY_ID') }} : {{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }} : {{ lookup('env', 'AWS_SESSION_TOKEN') }}"
 
       - name: Set endpoint, http method, session token and request payload
         ansible.builtin.set_fact:
