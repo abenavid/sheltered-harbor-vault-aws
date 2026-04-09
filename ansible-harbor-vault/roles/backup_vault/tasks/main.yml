@@ -21,20 +21,22 @@
 #        delegate_to: localhost
 #        no_log: true
 
-      - name: Get session token
-        amazon.aws.sts_assume_role:
-          access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
-          secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
-          role_arn: "{{ aws_caller.arn }}"
-          role_session_name: "apiAccess"
-        register: session_credentials
-        delegate_to: localhost
+#      - name: Get Session Token
+#        ansible.builtin.command: >
+#          aws sts get-session-token
+#        register: session_token_response
+#        delegate_to: localhost
+
+#      - name: Set Session Token Info variable
+#        ansible.builtin.set_fact:
+#          session_token_info: "{{ session_token_response.stdout | from_json }}"
 
       - name: Set endpoint, http method, session token and request payload
         ansible.builtin.set_fact:
           backup_endpoint: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
           backup_http_method: "PUT"
-          aws_session_token: "{{ session_credentials.sts_creds.session_token }}"
+#          aws_session_token: "{{ session_credentials.sts_creds.session_token }}"
+          aws_session_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('') }}"
           request_payload: "{{ create_vault_request | to_json }}"
         no_log: true
 
