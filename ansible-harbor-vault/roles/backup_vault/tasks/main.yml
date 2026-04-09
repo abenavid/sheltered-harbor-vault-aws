@@ -20,11 +20,12 @@
         delegate_to: localhost
         no_log: true
 
-      - name: Set endpoint, http method and session token
+      - name: Set endpoint, http method, session token and request payload
         ansible.builtin.set_fact:
           backup_endpoint: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
           backup_http_method: "PUT"
           aws_session_token: "{{ session_credentials.sts_creds.session_token }}"
+          request_payload: "{{ create_vault_request | to_json }}"
         no_log: true
 
       - name: Create auth.py python script on localhost
@@ -65,7 +66,7 @@
             x-amz-date: "{{ x_amz_date }}"
             x-amz-security-token: "{{ x_amz_security_token }}"
             Authorization: "{{ Authorization }}"
-          body: "{{ create_vault_request | to_json }}"
+          body: "{{ request_payload }}"
           force_basic_auth: false
           status_code: 200
           body_format: json
