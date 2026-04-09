@@ -13,7 +13,7 @@ session_token = "{{ aws_session_token }}"
 # Request parameters
 method = "{{ backup_http_method }}"
 service = 'backup'
-host = "{{ aws_backup_base_url }}"
+host = "{{ aws_backup_host }}"
 region = "{{ aws_region }}"
 endpoint = "{{ backup_endpoint }}"
 
@@ -26,6 +26,7 @@ datestamp = t.strftime('%Y%m%d')
 canonical_uri = endpoint
 canonical_querystring = ''
 canonical_headers = 'host:' + host + '\n'
+#SignedHeaders=content-type;host;x-amz-date;x-amz-security-token
 signed_headers = 'host'
 payload_hash = hashlib.sha256(''.encode('utf-8')).hexdigest()
 canonical_request = (method + '\n' + canonical_uri + '\n' + canonical_querystring + '\n'
@@ -56,7 +57,7 @@ authorization_header = (algorithm + ' ' + 'Credential=' + access_key + '/' + cre
                         'SignedHeaders=' + signed_headers + ', ' + 'Signature=' + signature)
 
 # Make the headers
-headers = {"Host": host,
+headers = {"host": host,
            "x_amz_date": amzdate,
            "x_amz_security_token": session_token,
            "Authorization": authorization_header}

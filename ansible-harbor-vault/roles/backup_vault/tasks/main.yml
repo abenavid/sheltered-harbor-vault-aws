@@ -25,6 +25,7 @@
           backup_endpoint: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
           backup_http_method: "PUT"
           aws_session_token: "{{ session_credentials.sts_creds.session_token }}"
+        no_log: true
 
       - name: Create auth.py python script on localhost
         ansible.builtin.template:
@@ -33,7 +34,7 @@
           mode: '0644'
         delegate_to: localhost
 
-      - name: Get Signed Headers for http request
+      - name: Get Headers for http request
         ansible.builtin.command:
           argv:
             - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
@@ -41,6 +42,7 @@
         register: auth_response
         changed_when: auth_response.rc == 0
         when: not ansible_check_mode
+        no_log: true
 
       - name: Set auth response info variable
         ansible.builtin.set_fact:
@@ -48,10 +50,11 @@
 
       - name: Set header facts
         ansible.builtin.set_fact:
-          host: "{{ auth_response_info.Host }}"
+          host: "{{ auth_response_info.host }}"
           x_amz_date: "{{ auth_response_info.x_amz_date }}"
           x_amz_security_token: "{{ auth_response_info.x_amz_security_token }}"
           Authorization: "{{ auth_response_info.Authorization }}"
+        no_log: true
 
       - name: Create logically air-gapped Backup Vault
         ansible.builtin.uri:
