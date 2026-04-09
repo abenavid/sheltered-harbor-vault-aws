@@ -25,7 +25,7 @@
         amazon.aws.sts_assume_role:
           access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
           secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
-          role_arn: "{{ aws_caller.arn }"
+          role_arn: "{{ aws_caller.arn }}"
           role_session_name: "apiAccess"
         register: session_credentials
         delegate_to: localhost
