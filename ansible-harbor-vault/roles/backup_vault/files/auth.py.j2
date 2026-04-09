@@ -28,7 +28,7 @@ canonical_querystring = ''
 canonical_headers = 'content-type:application/json' + '\n' + 'host:' + host + '\n' + 'x-amz-date:' + amzdate + '\n' + 'x-amz-security-token:' + session_token + '\n'
 #SignedHeaders=content-type;host;x-amz-date;x-amz-security-token
 signed_headers = 'content-type;host;x-amz-date;x-amz-security-token'
-payload_hash = hashlib.sha256({{ request_payload }}.encode('utf-8')).hexdigest()
+payload_hash = hashlib.sha256('{{ request_payload }}'.encode('utf-8')).hexdigest()
 canonical_request = (method + '\n' + canonical_uri + '\n' + canonical_querystring + '\n'
                      + canonical_headers + '\n' + signed_headers + '\n' + payload_hash)
 
