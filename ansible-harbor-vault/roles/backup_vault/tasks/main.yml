@@ -82,7 +82,7 @@
           status_code: 200
           body_format: json
           use_proxy: false
-          validate_certs: false
+          validate_certs: true
         register: vault_creation_response
         delegate_to: localhost
 
