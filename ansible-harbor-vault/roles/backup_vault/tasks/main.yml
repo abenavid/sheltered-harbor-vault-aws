@@ -24,10 +24,13 @@
 
       - name: Set endpoint, http method, session token and request payload
         ansible.builtin.set_fact:
-          backup_endpoint: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
-          backup_http_method: "PUT"
-          aws_session_token: "{{ session_token_info.Credentials.SessionToken }}"
+          api_endpoint: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
+          api_http_method: "PUT"
+          api_service: "backup"
           request_payload: "{{ create_vault_request | to_json }}"
+          aws_api_session_token: "{{ session_token_info.Credentials.SessionToken }}"
+          aws_api_access_key_id: "{{ session_token_info.Credentials.AccessKeyId }}"
+          aws_api_secret_access_key: "{{ session_token_info.Credentials.SecretAccessKey }}"
         no_log: true
 
       - name: Create auth.py python script on localhost
@@ -46,11 +49,11 @@
         changed_when: auth_response.rc == 0
         when: not ansible_check_mode
         environment:
-          AWS_SESSION_TOKEN: "{{ aws_session_token }}"
-          AWS_ACCESS_KEY_ID: "{{ session_token_info.Credentials.AccessKeyId }}"
-          AWS_SECRET_ACCESS_KEY: "{{ session_token_info.Credentials.SecretAccessKey }}"
+          AWS_SESSION_TOKEN: "{{ aws_api_session_token }}"
+          AWS_ACCESS_KEY_ID: "{{ aws_api_access_key_id }}"
+          AWS_SECRET_ACCESS_KEY: "{{ aws_api_secret_access_key }}"
         delegate_to: localhost
-        no_log: false
+        no_log: true
 
       - name: Set auth response info variable
         ansible.builtin.set_fact:
@@ -66,12 +69,12 @@
 
       - name: Create logically air-gapped Backup Vault
         ansible.builtin.uri:
-          url: "{{ aws_backup_base_url }}{{ backup_endpoint }}"
-          method: "{{ backup_http_method }}"
+          url: "{{ aws_backup_base_url }}{{ api_endpoint }}"
+          method: "{{ api_http_method }}"
           headers:
             host: "{{ host }}"
             x-amz-date: "{{ x_amz_date }}"
-            x-amz-security-token: "{{ aws_session_token }}"
+            x-amz-security-token: "{{ aws_api_session_token }}"
             Authorization: "{{ Authorization }}"
           body: "{{ request_payload }}"
           force_basic_auth: false
@@ -81,9 +84,9 @@
           validate_certs: false
           return_content: true
         environment:
-          AWS_SESSION_TOKEN: "{{ aws_session_token }}"
-          AWS_ACCESS_KEY_ID: "{{ session_token_info.Credentials.AccessKeyId }}"
-          AWS_SECRET_ACCESS_KEY: "{{ session_token_info.Credentials.SecretAccessKey }}"
+          AWS_SESSION_TOKEN: "{{ aws_api_session_token }}"
+          AWS_ACCESS_KEY_ID: "{{ aws_api_access_key_id }}"
+          AWS_SECRET_ACCESS_KEY: "{{ aws_api_secret_access_key }}"
         register: vault_creation_response
         delegate_to: localhost
 

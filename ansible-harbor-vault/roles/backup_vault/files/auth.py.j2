@@ -11,11 +11,11 @@ secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
 session_token = os.environ['AWS_SESSION_TOKEN']
 
 # Request parameters
-method = "{{ backup_http_method }}"
-service = 'backup'
-host = "{{ aws_backup_host }}"
+method = "{{ api_http_method }}"
+service = '{{ api_service }}'
+host = "{{ api_host }}"
 region = "{{ aws_region }}"
-endpoint = "{{ backup_endpoint }}"
+endpoint = "{{ api_endpoint }}"
 
 # Create a datetime object for signing
 t = datetime.datetime.utcnow()
