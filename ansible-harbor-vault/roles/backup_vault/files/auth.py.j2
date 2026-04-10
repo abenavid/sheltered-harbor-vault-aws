@@ -8,7 +8,7 @@ import json
 # AWS access keys
 access_key = os.environ['AWS_ACCESS_KEY_ID']
 secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
-session_token = "{{ aws_session_token }}"
+session_token = os.environ['AWS_SESSION_TOKEN']
 
 # Request parameters
 method = "{{ backup_http_method }}"
