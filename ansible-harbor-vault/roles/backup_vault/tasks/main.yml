@@ -101,7 +101,7 @@
 
       - name: Set vault info variable
         ansible.builtin.set_fact:
-          vault_info: "{{ vault_creation_response.json | from_json }}"
+          vault_info: "{{ vault_creation_response.content | from_json }}"
 
       - name: Set the ARN (Amazon Resource Name) of the vault
         ansible.builtin.set_fact:
