@@ -79,6 +79,7 @@
           body_format: json
           use_proxy: false
           validate_certs: false
+          return_content: true
         environment:
           AWS_SESSION_TOKEN: "{{ aws_session_token }}"
           AWS_ACCESS_KEY_ID: "{{ session_token_info.Credentials.AccessKeyId }}"
