@@ -1,0 +1,44 @@
+---
+    # - name: Create an AWS Backup Vault (optional, 'Default' is used if not specified)
+    #   amazon.aws.backup_vault:
+    #     name: "{{ backup_vault_name }}"
+    #     state: present
+    #     # Optionally specify a KMS key ARN for encryption
+    #     # encryption_key_arn: "arn:aws:kms:us-east-1:123456789012:key/..."
+    #   register: vault_result
+    #   # This task is idempotent, it only creates the vault if it doesn't exist.
+
+- name: Create yaml file on localhost
+  ansible.builtin.template:
+    src: files/backup_plan.j2
+    dest: backup_plan.yml
+  delegate_to: localhost
+
+- name: Debug file
+  ansible.builtin.debug:
+    msg: "{{ lookup('file', 'backup_plan.yml') }}"
+  delegate_to: localhost
+
+- name: Create logically air-gapped Backup Vault Plan
+  ansible.builtin.shell: |
+    aws organizations create-policy --name "{{ backup_plan_name }}" --type BACKUP_POLICY --description "Test automation backup policy" --cli-input-yaml file://backup_plan.yml
+  delegate_to: localhost
+
+
+      # The IAM role for AWS Backup (AWSBackupDefaultServiceRole) needs permissions
+      # to perform backup operations on your behalf.
+
+- name: Assign resources to the backup plan using tags
+  amazon.aws.backup_selection:
+    plan_name: "{{ backup_plan_name }}"
+    selection_name: "{{ backup_resource_name }}"
+    iam_role_arn: "{{ backup_iam_role }}" # Must be the same role
+    resources:
+      - "{{ backup_resource_arn }}" # Example instance ARN
+    # Alternatively, use tags to dynamically select resources:
+    # selection_tags:
+    #   - condition_type: "STRINGEQUALS"
+    #     key: "Environment"
+    #     value: "Production"
+    state: present
+  register: selection_result

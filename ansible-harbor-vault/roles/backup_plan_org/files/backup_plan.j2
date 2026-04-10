@@ -1,0 +1,52 @@
+plans:
+  PII_Backup_Plan:
+    regions:
+    - us-east-1
+    - ap-northeast-3
+    - eu-north-1
+    rules:
+      hourly:
+        schedule_expression: {{ backup_rule_schedule }}
+        start_backup_window_minutes: '60'
+        target_backup_vault_name: {{ backup_vault_name }}
+        target_logically_air_gapped_backup_vault_arn: {{ backup_vault_arn }}
+        index_actions:
+          resource_types:
+            "@@assign":
+            - EBS
+            - S3
+        lifecycle:
+          delete_after_days: '{{ backup_delete_after_days | int }}'
+          move_to_cold_storage_after_days: '180'
+          opt_in_to_archive_for_supported_resources: 'true'
+        enablecontinuousbackup: true
+        copy_actions:
+          {{ secondary_backup_vault_arn }}:
+            target_backup_vault_arn:
+              "@@assign": {{ secondary_backup_vault_arn }}
+            lifecycle:
+              delete_after_days: '28'
+              move_to_cold_storage_after_days: '180'
+              opt_in_to_archive_for_supported_resources: 'false'
+            scan_actions:
+              GUARDDUTY:
+                scan_mode:
+                  "@@assign": INCREMENTAL_SCAN
+          #arn:aws:backup:us-west-1:111111111111:backup-vault:tertiary_vault:
+          #  target_backup_vault_arn:
+          #    "@@assign": arn:aws:backup:us-west-1:111111111111:backup-vault:tertiary_vault
+          #  lifecycle:
+          #    delete_after_days: '{{ backup_delete_after_days | int }}'
+          #    move_to_cold_storage_after_days: '180'
+          #    opt_in_to_archive_for_supported_resources: 'false'
+    selections:
+      tags:
+        datatype:
+          iam_role_arn: {{ backup_iam_role }}
+          tag_key: dataType
+          tag_value:
+          - PII
+          - RED
+    advanced_backup_settings:
+      ec2:
+        windows_vss: enabled
