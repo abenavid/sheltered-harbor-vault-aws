@@ -12,7 +12,7 @@
 
       - name: Call aws_api_credentials Role to get credentials for api request
         ansible.builtin.include_role:
-          name: aws_api_credentials
+          name: ../../../roles/aws_api_credentials
 #          vars:
 #            api_http_method: "{{ api_http_method }}"
 #            api_service: "{{ api_service }}"
