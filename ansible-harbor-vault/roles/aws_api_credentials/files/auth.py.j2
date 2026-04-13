@@ -57,8 +57,7 @@ authorization_header = (algorithm + ' ' + 'Credential=' + access_key + '/' + cre
                         'SignedHeaders=' + signed_headers + ', ' + 'Signature=' + signature)
 
 # Make the headers
-headers = {"host": host,
-           "x_amz_date": amzdate,
+headers = {"x_amz_date": amzdate,
            "x_amz_security_token": session_token,
            "Authorization": authorization_header}
 print(json.dumps(headers))

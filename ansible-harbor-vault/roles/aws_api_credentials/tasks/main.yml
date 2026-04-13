@@ -1,0 +1,57 @@
+---
+  - name: Tasks to generate headers for authentication and signing of aws api requests
+    block:
+      - name: Get Temp Session Token
+        ansible.builtin.command: >
+          aws sts get-session-token --duration-seconds 3600
+        register: session_token_response
+        delegate_to: localhost
+
+      - name: Set Session Token Info variable
+        ansible.builtin.set_fact:
+          session_token_info: "{{ session_token_response.stdout | from_json }}"
+
+      - name: Set facts for temp session token, access key id and secret access key
+        ansible.builtin.set_fact:
+          aws_api_session_token: "{{ session_token_info.Credentials.SessionToken }}"
+          aws_api_access_key_id: "{{ session_token_info.Credentials.AccessKeyId }}"
+          aws_api_secret_access_key: "{{ session_token_info.Credentials.SecretAccessKey }}"
+        no_log: true
+
+      - name: Create auth.py python script on localhost
+        ansible.builtin.template:
+          src: files/auth.py.j2
+          dest: auth.py
+          mode: '0644'
+        delegate_to: localhost
+
+      - name: Get Headers for http request
+        ansible.builtin.command:
+          argv:
+            - "{{ ansible_playbook_python | default(ansible_python_interpreter | default('python3')) }}"
+            - "auth.py"
+        register: auth_response
+        changed_when: auth_response.rc == 0
+        when: not ansible_check_mode
+        environment:
+          AWS_SESSION_TOKEN: "{{ aws_api_session_token }}"
+          AWS_ACCESS_KEY_ID: "{{ aws_api_access_key_id }}"
+          AWS_SECRET_ACCESS_KEY: "{{ aws_api_secret_access_key }}"
+        delegate_to: localhost
+        no_log: true
+
+      - name: Set auth response info variable
+        ansible.builtin.set_fact:
+          auth_response_info: "{{ auth_response.stdout | from_json }}"
+
+      - name: Set header facts
+        ansible.builtin.set_fact:
+          x_amz_date: "{{ auth_response_info.x_amz_date }}"
+          x_amz_security_token: "{{ auth_response_info.x_amz_security_token }}"
+          Authorization: "{{ auth_response_info.Authorization }}"
+        no_log: true
+    rescue:
+      - name: Log failure message
+        ansible.builtin.debug:
+          msg: "Task {{ ansible_failed_task.name }} failed with the following message {{ ansible_failed_result.stderr }}"
+

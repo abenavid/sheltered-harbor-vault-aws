@@ -2,7 +2,6 @@
 min_retention_days: 7
 max_retention_days: 35
 aws_backup_base_url: "https://backup.{{ aws_region }}.amazonaws.com"
-api_host: "backup.{{ aws_region }}.amazonaws.com"
 
 
 
