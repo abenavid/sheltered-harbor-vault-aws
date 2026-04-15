@@ -13,12 +13,6 @@
       - name: Call aws_api_credentials Role to get credentials for api request
         ansible.builtin.include_role:
           name: ../roles/aws_api_credentials
-#          vars:
-#            api_http_method: "{{ api_http_method }}"
-#            api_service: "{{ api_service }}"
-#            api_host: "{{ api_host }}"
-#            api_endpoint: "{{ api_endpoint }}"
-#            request_payload: "{{ request_payload }}"
 
       - name: Create logically air-gapped Backup Vault
         ansible.builtin.uri:

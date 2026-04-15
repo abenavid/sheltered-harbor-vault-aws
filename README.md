@@ -6,21 +6,27 @@ The article frames three themes—**secure and immutable vault**, **air-gapped /
 
 ![AWS architecture diagram: secure data pipeline with Ingress, Analytics, Vault, Forensics, and Egress zones; data flows from ingestion to recovery via Direct Connect; Management Interface zone; shared services IAM, KMS, CloudWatch, CloudTrail, Macie, GuardDuty, and SNS.](docs/assets/sheltered-harbor-vault-architecture.png)
 
+
+**TODO: ADD info on how AWS Backup service and the use of logically air-gapped vaults satisfy the Sheltered Harbor standards.**
+
+
+
 ## How this maps to the reference architecture
 
 ### Secure and immutable data vault
 
-| Article concept | What this repo does |
-|-----------------|---------------------|
-| Immutable storage / WORM (Object Lock) | The `s3_vault` role creates a versioned bucket with Object Lock **COMPLIANCE** mode and a default retention period (`vault_retention_years` in `inventories/group_vars/all.yml`). |
-| Encryption at rest (e.g. SSE-KMS) | The bucket uses **SSE-KMS** with the CMK created by the `kms` role (`encryption: aws:kms`, `encryption_key_id` from the key ARN). |
-| KMS for key control | The `kms` role provisions a **customer-managed** key (`kms_alias`, default `alias/sheltered-harbor-vault`). |
-| Security of the vault (IAM boundaries) | The `iam_writer` role defines **VaultWriteRole** + **VaultWritePolicy**: `s3:PutObject` / `s3:PutObjectRetention` on the vault bucket prefix and `kms:Encrypt` / `kms:GenerateDataKey` on that CMK only. |
+| Article concept                                                     | What this repo does                                                                                                                                                                                                              |
+|---------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Immutable storage / WORM (Object Lock)                              | The `backup_vault` role creates a logically air-gapped versioned bucket with Object Lock **COMPLIANCE** mode and a default retention period (`min_retention_days` and `max_retention_days` in `backup_vault/defaults/main.yml`). |
+| **TODO: Not sure about this one** Encryption at rest (e.g. SSE-KMS) | The vault/bucket uses **SSE-KMS** with the CMK created by the `kms` role (`encryption: aws:kms`, `encryption_key_id` from the key ARN).                                                                                          |
+| KMS for key control                                                 | The `kms` role provisions a **customer-managed** key (`kms_alias`, default `alias/sheltered-harbor-vault`).                                                                                                                      |
+| **TODO: Not Used** Security of the vault (IAM boundaries)           | The `iam_writer` role defines **VaultWriteRole** + **VaultWritePolicy**: `s3:PutObject` / `s3:PutObjectRetention` on the vault bucket prefix and `kms:Encrypt` / `kms:GenerateDataKey` on that CMK only.                         |
 
-**Encryption in transit:** The `s3_vault` role attaches a bucket policy that **denies all S3 actions** when `aws:SecureTransport` is false (requests not over HTTPS/TLS).
+**TODO: Not Used but how does backup service handle this** **Encryption in transit:** The `s3_vault` role attaches a bucket policy that **denies all S3 actions** when `aws:SecureTransport` is false (requests not over HTTPS/TLS).
 
 ### Air-gapped (isolated) environment
 
+**TODO: Replace with information on how AWS Backup service logically air-gapped vaults and backup plans accomplish this same thing**
 The article describes **separate AWS Organizations**, **cross-account IAM**, **Direct Connect**, **Lambda/EventBridge** for time-bound access, and network controls. The vault account side still centers on **VaultWriteRole** and the **cross-account–capable writer** trust.
 
 - **VaultWriteRole** trusts `arn:aws:iam::<trusted_account_id>:root` when `trusted_account_id` is set in `inventories/group_vars/all.yml`. If you omit it or leave the placeholder `111111111111`, the playbook defaults the trust to the **same account** as the caller (`bootstrap_vault.yml` resolves `trusted_account_id` from `amazon.aws.aws_caller_info`).
@@ -29,10 +35,11 @@ The article describes **separate AWS Organizations**, **cross-account IAM**, **D
 
 ### Forensic scanning of data
 
+**TODO: Replace with information on how GuardDuty scanning is enabled on logically air-gapped vaults using backup plans**
 The article mentions **GuardDuty Malware Protection for S3** and partner scanners. When `vault_forensic_scanning_enabled` is true, the `forensic_scanning` role enables **Malware Protection for S3** on the vault bucket (IAM role, malware protection plan, optional EventBridge→SNS and partner read role). Third-party scanners and org-wide policy remain your responsibility. **Malware protection plan creation** calls AWS `CreateMalwareProtectionPlan`, which requires **boto3 ≥ 1.42.54**; the role runs `pip install --user 'boto3>=1.42.54'` for the playbook Python unless you set `vault_forensic_scanning_upgrade_boto3: false` (then bake `ansible-harbor-vault/requirements-python.txt` into your execution environment).
 
 ### Operational assurance (logging and monitoring)
-
+**TODO: Not Used**
 The article references **CloudTrail**, **GuardDuty**, and monitoring KMS usage. When `vault_logging_monitoring_enabled` is true, the `logging_monitoring` role provisions a **multi-region CloudTrail** (dedicated S3 bucket, log file validation), optionally **CloudWatch Logs** delivery when `vault_cloudtrail_cloudwatch_logs_enabled` is true, enables the regional **GuardDuty detector**, creates an **SNS topic** for security notifications (unless you set `vault_security_alarm_sns_topic_arn` to an existing topic), optionally a **CloudWatch metric filter** on the trail log group for critical **KMS APIs** against the vault CMK (`DisableKey`, `ScheduleKeyDeletion`, `DeleteAlias`) with an alarm to SNS, and an **EventBridge rule** that forwards **GuardDuty findings** at or above `vault_guardduty_alarm_min_severity` to that topic. **Creating** a trail with CloudWatch Logs requires the **deploying IAM principal** to have **`iam:PassRole`** on the CloudTrail→CloudWatch Logs role for `cloudtrail.amazonaws.com`; otherwise `CreateTrail` can fail with `InvalidCloudWatchLogsRoleArnException` (often phrased as a trust issue). Grant PassRole on `arn:aws:iam::<account>:role/<vault_cloudtrail_cw_role_name>` (default `CloudTrailCloudWatchLogsRole`), or set `vault_cloudtrail_cloudwatch_logs_enabled: false` to skip CWL and the KMS log-based alarm until PassRole is in place. If you supply your own SNS topic ARN, attach a policy that allows **CloudWatch** and **EventBridge** to publish (see the role’s SNS policy for the `vault-*` rule prefix). Organization-level trails, delegated admin, and subscriber endpoints (email, ticketing) are still yours to configure.
 
 ---
@@ -41,30 +48,141 @@ The article references **CloudTrail**, **GuardDuty**, and monitoring KMS usage. 
 
 All automation lives under **`ansible-harbor-vault/`**:
 
-| Path | Role |
-|------|------|
-| `ansible-harbor-vault/playbooks/bootstrap_vault.yml` | Entry playbook: loads `.env` for AWS credentials/region, resolves caller account and optional `trusted_account_id`, then runs `kms` → `s3_vault` → optional `forensic_scanning` → `iam_writer` → optional `logging_monitoring`. |
-| `ansible-harbor-vault/playbooks/bootstrap_network_isolation.yml` | Optional: Organizations OU/SCP, VPC zones and endpoints, Direct Connect gateway association, Lambda/EventBridge time-bound writer policy (see `inventories/group_vars/all.yml`). |
-| `ansible-harbor-vault/inventories/localhost.yml` | Single local host for `connection: local` runs. |
-| `ansible-harbor-vault/inventories/group_vars/all.yml` | Defaults: `aws_region`, `vault_bucket_name`, `vault_retention_years`, `kms_alias`, optional `trusted_account_id`; flags such as `vault_forensic_scanning_enabled`, `vault_logging_monitoring_enabled`. |
-| `ansible-harbor-vault/roles/kms/` | Creates the **CMK** used by the bucket and writer policy. |
-| `ansible-harbor-vault/roles/s3_vault/` | Creates the **S3 bucket**: versioning, Object Lock, block public access, SSE-KMS. |
-| `ansible-harbor-vault/roles/iam_writer/` | Creates **VaultWriteRole** and customer-managed **VaultWriteManagedPolicy** for least-privilege writes. |
-| `ansible-harbor-vault/roles/forensic_scanning/` | Optional: GuardDuty Malware Protection for S3, EventBridge→SNS, partner scanner role. |
-| `ansible-harbor-vault/roles/logging_monitoring/` | Optional: CloudTrail (S3 + CloudWatch Logs), GuardDuty detector, KMS metric filter + alarm, GuardDuty→SNS via EventBridge. |
-| `ansible-harbor-vault/roles/network_isolation/` | Optional VPC, ingress/egress subnets, NAT, endpoints, VGW (when enabled). |
-| `ansible-harbor-vault/roles/direct_connect_gateway/` | Optional Direct Connect gateway + VGW association. |
-| `ansible-harbor-vault/roles/org_isolation/` | Optional Organizations OU + example SCP (management account). |
-| `ansible-harbor-vault/roles/time_bound_access/` | Optional Lambda + EventBridge schedules to attach/detach **VaultWriteManagedPolicy**. |
-| `ansible-harbor-vault/requirements.yml` | Same collection pins as `collections/requirements.yml` (for local runs from `ansible-harbor-vault/`). |
-| `collections/requirements.yml` | **AWX/AAP**: `amazon.aws` (>= 8.2.0), `community.aws` (>= 8.0.0). Controller installs this when the project root is the repository root. |
-| `ansible-harbor-vault/requirements-python.txt` | Optional EE hint: **boto3>=1.42.54** for GuardDuty malware protection plan APIs. |
-| `ansible-harbor-vault/ansible.cfg` | Sets inventory path and `roles_path`. |
-| `execution-environment.yml` | **Ansible Builder 3** definition: AAP 26 **ee-supported-rhel9** base, `collections/requirements.yml`, **ansible-core** / **ansible-runner**, **boto3** via `requirements-python.txt`, `ee/bindep.txt` (e.g. **python3-pip** for the builder stage). Adjust this file as you iterate. |
-| `ee/bindep.txt` | System packages for the EE build (bindep format); referenced from `execution-environment.yml`. |
-| `Containerfile` | **Thin alternative**: same base image, only upgrades **boto3>=1.42.54** (fast, reliable push to PAH when builder hits unrelated collection pip builds on ee-supported). |
+| Path                                                             | Role                                                                                                                                                                                                                                                                                                                                                                      |
+|------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ansible-harbor-vault/playbooks/bootstrap_vault.yml`             | Entry playbook: loads `.env` for AWS credentials/region, resolves caller account and optional `trusted_account_id`, then runs `kms` → `s3_vault` → optional `forensic_scanning` → `iam_writer` → optional `logging_monitoring`.                                                                                                                                           |
+| `ansible-harbor-vault/playbooks/bootstrap_backup_vault.yml`      | Backup vault playbook: resolves AWS credentials, sets AWS region, resolves caller account and optional `trusted_account_id`, then runs `kms` → `backup_vault` roles to create logically air-gapped vault using AWS Backup service.                                                                                                                                        |
+| `ansible-harbor-vault/playbooks/bootstrap_backup_plan.yml`       | Backup plan playbook: resolves AWS credentials, sets AWS region, resolves caller account and optional `trusted_account_id`, then runs `kms` → `backup_plan` roles to create AWS Backup service backup plan for logically air-gapped vault created by the `backup_vault` role. The backup plan defines backup policies, GuardDuty scanning and backup resource assignment. |
+| `ansible-harbor-vault/playbooks/bootstrap_network_isolation.yml` | Optional: Organizations OU/SCP, VPC zones and endpoints, Direct Connect gateway association, Lambda/EventBridge time-bound writer policy (see `inventories/group_vars/all.yml`).                                                                                                                                                                                          |
+| `ansible-harbor-vault/inventories/localhost.yml`                 | Single local host for `connection: local` runs.                                                                                                                                                                                                                                                                                                                           |
+| `ansible-harbor-vault/inventories/group_vars/all.yml`            | Defaults: `aws_region`, `vault_bucket_name`, `vault_retention_years`, `kms_alias`, optional `trusted_account_id`; flags such as `vault_forensic_scanning_enabled`, `vault_logging_monitoring_enabled`.                                                                                                                                                                    |
+| `ansible-harbor-vault/roles/aws_api_credentials/`                | Creates the required security tokens for signing HTTP requests to AWS services apis.                                                                                                                                                                                                                                                                                      |
+| `ansible-harbor-vault/roles/backup_plan/`                        | Creates AWS Backup service backup plan for a logically air-gapped vault. The backup plan defines backup policies, GuardDuty scanning and backup resource assignment.                                                                                                                                                                                                      |
+| `ansible-harbor-vault/roles/backup_vault/`                       | Creates a logically air-gapped vault using the AWS Backup service. Requests to the AWS Backup service api are signed using security tokens obtained from `aws_api_credentials` role.                                                                                                                                                                                      |
+| `ansible-harbor-vault/roles/kms/`                                | Creates the **CMK** used by the bucket and writer policy.                                                                                                                                                                                                                                                                                                                 |
+| `ansible-harbor-vault/roles/s3_vault/`                           | Creates the **S3 bucket**: versioning, Object Lock, block public access, SSE-KMS.                                                                                                                                                                                                                                                                                         |
+| `ansible-harbor-vault/roles/iam_writer/`                         | Creates **VaultWriteRole** and customer-managed **VaultWriteManagedPolicy** for least-privilege writes.                                                                                                                                                                                                                                                                   |
+| `ansible-harbor-vault/roles/forensic_scanning/`                  | Optional: GuardDuty Malware Protection for S3, EventBridge→SNS, partner scanner role.                                                                                                                                                                                                                                                                                     |
+| `ansible-harbor-vault/roles/logging_monitoring/`                 | Optional: CloudTrail (S3 + CloudWatch Logs), GuardDuty detector, KMS metric filter + alarm, GuardDuty→SNS via EventBridge.                                                                                                                                                                                                                                                |
+| `ansible-harbor-vault/roles/network_isolation/`                  | Optional VPC, ingress/egress subnets, NAT, endpoints, VGW (when enabled).                                                                                                                                                                                                                                                                                                 |
+| `ansible-harbor-vault/roles/direct_connect_gateway/`             | Optional Direct Connect gateway + VGW association.                                                                                                                                                                                                                                                                                                                        |
+| `ansible-harbor-vault/roles/org_isolation/`                      | Optional Organizations OU + example SCP (management account).                                                                                                                                                                                                                                                                                                             |
+| `ansible-harbor-vault/roles/time_bound_access/`                  | Optional Lambda + EventBridge schedules to attach/detach **VaultWriteManagedPolicy**.                                                                                                                                                                                                                                                                                     |
+| `ansible-harbor-vault/requirements.yml`                          | Same collection pins as `collections/requirements.yml` (for local runs from `ansible-harbor-vault/`).                                                                                                                                                                                                                                                                     |
+| `collections/requirements.yml`                                   | **AWX/AAP**: `amazon.aws` (>= 8.2.0), `community.aws` (>= 8.0.0). Controller installs this when the project root is the repository root.                                                                                                                                                                                                                                  |
+| `ansible-harbor-vault/requirements-python.txt`                   | Optional EE hint: **boto3>=1.42.54** for GuardDuty malware protection plan APIs.                                                                                                                                                                                                                                                                                          |
+| `ansible-harbor-vault/ansible.cfg`                               | Sets inventory path and `roles_path`.                                                                                                                                                                                                                                                                                                                                     |
+| `execution-environment.yml`                                      | **Ansible Builder 3** definition: AAP 26 **ee-supported-rhel9** base, `collections/requirements.yml`, **ansible-core** / **ansible-runner**, **boto3** via `requirements-python.txt`, `ee/bindep.txt` (e.g. **python3-pip** for the builder stage). Adjust this file as you iterate.                                                                                      |
+| `ee/bindep.txt`                                                  | System packages for the EE build (bindep format); referenced from `execution-environment.yml`.                                                                                                                                                                                                                                                                            |
+| `Containerfile`                                                  | **Thin alternative**: same base image, only upgrades **boto3>=1.42.54** (fast, reliable push to PAH when builder hits unrelated collection pip builds on ee-supported).                                                                                                                                                                                                   |
 
 ---
+
+## Using AWS Backup Service As Sheltered Harbor Compliant Solution
+
+**TODO: Add paragraph or so on how AWS Backkup service is Sheltered Harbor Compliant and it could be used for the FairView solution.**  
+
+### Signing Requests to AWS Services
+
+Authentication information that you send in a AWS API request must include a signature. 
+AWS Signature Version 4 (SigV4) is the AWS signing protocol for adding authentication information to AWS API requests.
+You don't use your secret access key to sign API requests. Instead, you use the SigV4 signing process. Signing requests involves:
+
+- Creating a canonical request based on the request details.
+
+- Calculating a signature using your AWS credentials.
+
+- Adding this signature to the request as an `Authorization` header.
+
+AWS then replicates this process and verifies the signature, granting or denying access accordingly.
+
+For more information see [AWS Signature Version 4 for API requests](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv.html)
+
+The `aws_api_credentials` role calculates the signature for the Authorization header using the rules defined here,
+[Signature Calculations for the Authorization Header: Transferring Payload in a Single Chunk (AWS Signature Version 4)](https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html)
+
+The following details the tasks performed by the `aws_api_credentials` role.
+
+First temporary credentials are obtained using the `get-session-token` operation of the `sts` service. These credentials are then 
+used to populate the `aws_api_session_token` , `aws_api_access_key_id` and `aws_api_secret_access_key` facts.
+
+```yaml
+      - name: Get Temp Session Token
+        ansible.builtin.command: >
+          aws sts get-session-token --duration-seconds 3600
+        register: session_token_response
+        delegate_to: localhost
+
+      - name: Set Session Token Info variable
+        ansible.builtin.set_fact:
+          session_token_info: "{{ session_token_response.stdout | from_json }}"
+
+      - name: Set facts for temp session token, access key id and secret access key
+        ansible.builtin.set_fact:
+          aws_api_session_token: "{{ session_token_info.Credentials.SessionToken }}"
+          aws_api_access_key_id: "{{ session_token_info.Credentials.AccessKeyId }}"
+          aws_api_secret_access_key: "{{ session_token_info.Credentials.SecretAccessKey }}"
+        no_log: true
+```
+
+A `jinja2` template was created in `files/auth.py.j2` that will generate a Python script file that will be used to calculate 
+the required headers for signing the AWS API request. See the `files/auth.py.j2` template contents and the reference above to see
+how these headers are calculated. The following shows only the parts of the script that are dynamic requiring input values 
+from the caller generating the script.
+
+The following environment variables must be set to the values of the temporary credentials created by the `sts` service.
+
+````
+# AWS access keys
+access_key = os.environ['AWS_ACCESS_KEY_ID']
+secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
+session_token = os.environ['AWS_SESSION_TOKEN']
+````
+
+The ansible role or playbook that is using the `aws_api_credentials` role must define the following facts for the service and 
+api endpoint being requested.
+
+````
+# Request parameters
+method = "{{ api_http_method }}"
+service = '{{ api_service }}'
+host = "{{ api_host }}"
+region = "{{ aws_region }}"
+endpoint = "{{ api_endpoint }}"
+````
+
+The payload of the request body must be set as a fact called `request_payload`. It is used in the following line in the script.
+If the request body is empty just set the `request_payload` fact to an empty string.
+
+````
+payload_hash = hashlib.sha256('{{ request_payload }}'.encode('utf-8')).hexdigest()
+````
+
+The script returns the following header values in JSON format.
+
+````
+# Make the headers
+headers = {"x_amz_date": amzdate,
+           "x_amz_security_token": session_token,
+           "Authorization": authorization_header}
+print(json.dumps(headers))
+````
+
+After executing the script, the `aws_api_credentials` role parses this JSON to extract values to populate the 
+`x_amz_date`, `x_amz_security_token` and `Authorizaton` facts.
+
+The ansible role or playbook that is using the `aws_api_credentials` role then uses these facts to populate the 
+`x-amz-date`, `x-amz-security-token` and `Authorizaton` request headers when making the request to the AWS API.
+
+
+
+
+
+### Creating Logically Air-gapped Vault
+
+### Creating Backup Plan
+
+
 
 ## Execution environment (container image)
 
@@ -104,8 +222,8 @@ ansible-navigator run playbooks/bootstrap_vault.yml \
 ## Prerequisites
 
 - Ansible with [amazon.aws](https://github.com/ansible-collections/amazon.aws) and [community.aws](https://github.com/ansible-collections/community.aws) installed (see `collections/requirements.yml` at the repo root, or `ansible-harbor-vault/requirements.yml` when working only in that directory).
-- AWS credentials that can create KMS keys, S3 buckets (with Object Lock), IAM roles, CloudTrail, CloudWatch Logs/alarms, SNS, EventBridge, and GuardDuty in the target account (exact permissions depend on which optional roles you enable).
-- When **`vault_cloudtrail_cloudwatch_logs_enabled`** is true, the caller also needs **`iam:PassRole`** on the CloudTrail CloudWatch Logs role so CloudTrail can use that role. Example statement (replace account id and role name if you changed `vault_cloudtrail_cw_role_name`):
+- **TODO: Some of these may not be relevant if using AWS Backup service** AWS credentials that can create KMS keys, S3 buckets (with Object Lock), IAM roles, CloudTrail, CloudWatch Logs/alarms, SNS, EventBridge, and GuardDuty in the target account (exact permissions depend on which optional roles you enable).
+- **TODO: This may not be relevant if using AWS Backup service** When **`vault_cloudtrail_cloudwatch_logs_enabled`** is true, the caller also needs **`iam:PassRole`** on the CloudTrail CloudWatch Logs role so CloudTrail can use that role. Example statement (replace account id and role name if you changed `vault_cloudtrail_cw_role_name`):
 
   ```json
   {
@@ -117,7 +235,7 @@ ansible-navigator run playbooks/bootstrap_vault.yml \
     }
   }
   ```
-- A unique globally available S3 bucket name (`vault_bucket_name`).
+- **TODO: This may not be relevant if using AWS Backup service** A unique globally available S3 bucket name (`vault_bucket_name`).
 
 ## Configuration
 
@@ -142,26 +260,26 @@ ansible-navigator run playbooks/bootstrap_vault.yml \
    - `AWS_SESSION_TOKEN` (if using temporary credentials; optional otherwise)
    - `AWS_DEFAULT_REGION` (optional; playbook can also use `aws_region` in group_vars)
 
-3. **Edit `ansible-harbor-vault/inventories/group_vars/all.yml`**: set `vault_bucket_name`, retention, region, `kms_alias`, and optionally `trusted_account_id` for cross-account **AssumeRole** from your writer account.
+3. **TODO: This may not be relevant if using AWS Backup service** **Edit `ansible-harbor-vault/inventories/group_vars/all.yml`**: set `vault_bucket_name`, retention, region, `kms_alias`, and optionally `trusted_account_id` for cross-account **AssumeRole** from your writer account.
 
 ## Run
 
 From `ansible-harbor-vault/`:
 
-```bash
-ansible-playbook playbooks/bootstrap_vault.yml
-```
+
+**TODO: Not Used** ansible-playbook playbooks/bootstrap_vault.yml
+
 
 Optional isolation controls (after installing collections as above):
 
-```bash
-ansible-playbook playbooks/bootstrap_network_isolation.yml
-```
+
+**TODO: Not Used** ansible-playbook playbooks/bootstrap_network_isolation.yml
+
 
 Dry run:
 
-```bash
-ansible-playbook playbooks/bootstrap_vault.yml --check
-```
+
+**TODO: Not Used** ansible-playbook playbooks/bootstrap_vault.yml --check
+
 
 ---
