@@ -20,18 +20,18 @@ plans:
           move_to_cold_storage_after_days: '180'
           opt_in_to_archive_for_supported_resources: 'true'
         enablecontinuousbackup: true
-        copy_actions:
-          {{ secondary_backup_vault_arn }}:
-            target_backup_vault_arn:
-              "@@assign": {{ secondary_backup_vault_arn }}
-            lifecycle:
-              delete_after_days: '28'
-              move_to_cold_storage_after_days: '180'
-              opt_in_to_archive_for_supported_resources: 'false'
-            scan_actions:
-              GUARDDUTY:
-                scan_mode:
-                  "@@assign": INCREMENTAL_SCAN
+        #copy_actions:
+        #  {{ secondary_backup_vault_arn }}:
+        #    target_backup_vault_arn:
+        #     "@@assign": {{ secondary_backup_vault_arn }}
+        #    lifecycle:
+        #      delete_after_days: '28'
+        #      move_to_cold_storage_after_days: '180'
+        #      opt_in_to_archive_for_supported_resources: 'false'
+        scan_actions:
+          GUARDDUTY:
+            scan_mode:
+              "@@assign": INCREMENTAL_SCAN
           #arn:aws:backup:us-west-1:111111111111:backup-vault:tertiary_vault:
           #  target_backup_vault_arn:
           #    "@@assign": arn:aws:backup:us-west-1:111111111111:backup-vault:tertiary_vault
