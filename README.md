@@ -168,17 +168,115 @@ headers = {"x_amz_date": amzdate,
 print(json.dumps(headers))
 ````
 
+The Python `auth.py` is executed with the following environment settings.
+
+```yaml
+environment:
+  AWS_SESSION_TOKEN: "{{ aws_api_session_token }}"
+  AWS_ACCESS_KEY_ID: "{{ aws_api_access_key_id }}"
+  AWS_SECRET_ACCESS_KEY: "{{ aws_api_secret_access_key }}"
+```
+
 After executing the script, the `aws_api_credentials` role parses this JSON to extract values to populate the 
 `x_amz_date`, `x_amz_security_token` and `Authorizaton` facts.
 
 The ansible role or playbook that is using the `aws_api_credentials` role then uses these facts to populate the 
 `x-amz-date`, `x-amz-security-token` and `Authorizaton` request headers when making the request to the AWS API.
 
-
-
-
-
 ### Creating Logically Air-gapped Vault
+
+The `backup_vault` role was created o create a logically air-gapped vault in the AWS Backup service. The following details
+the tasks in the `backup_vault` role.
+
+To create the logically air-gapped vault, a request is made to the AWS Backup service API. The documentation for the 
+AWS Backup service API can be found here, [AWS Backup API](https://docs.aws.amazon.com/aws-backup/latest/devguide/api-reference.html)
+The documentation for the action that creates the logically air-gapped vault can be found here, [CreateLogicallyAirGappedBackupVault](https://docs.aws.amazon.com/aws-backup/latest/devguide/API_CreateLogicallyAirGappedBackupVault.html)
+
+For requests made to AWS API, the authentication information that you send must include a signature. 
+AWS Signature Version 4 (SigV4) is the AWS signing protocol for adding authentication information to AWS API requests.
+
+For this reason, the `aws_api_credentials` roles was created as described above.
+
+The first task forthe `backup_vault` role is to create facts required by the `aws_api_credentials` role and the `uri` module used
+to make the request to the AWS Backup service API. The following are the required facts.
+
+```yaml
+      - name: Set endpoint, http method and request payload
+        ansible.builtin.set_fact:
+          api_http_method: "PUT"
+          api_service: "backup"
+          api_host: "backup.{{ aws_region }}.amazonaws.com"
+          api_endpoint: "/logically-air-gapped-backup-vaults/{{ vault_name }}"
+          request_payload: "{{ create_vault_request | to_json }}"
+        no_log: true
+
+````
+The following describes each fact listed above.
+
+- `api_hhtp_method`: The HTTP method required by the API endpoint.
+- `api_service`: The AWS service name. For example, the AWS Backup service has the name of `backup`.
+- `api_host`: The host name for the AWS service.
+- `api_endpoint`: The API endpoint for the request. **Note:** The above endpoint contains a path variable `vault_name` containing the name of the vault that is created.
+- `request_payload`: The API request body.
+
+With these facts set, the next task is to call the `aws_api_credentials` role.
+
+````yaml
+      - name: Call aws_api_credentials Role to get credentials for api request
+        ansible.builtin.include_role:
+          name: ../roles/aws_api_credentials
+````
+
+Next the API request to create the logically air-gapped vault is made using the `uri` module.
+
+````yaml
+      - name: Create logically air-gapped Backup Vault
+        ansible.builtin.uri:
+          url: "{{ aws_backup_base_url }}{{ api_endpoint }}"
+          method: "{{ api_http_method }}"
+          headers:
+            host: "{{ api_host }}"
+            x-amz-date: "{{ x_amz_date }}"
+            x-amz-security-token: "{{ x_amz_security_token }}"
+            Authorization: "{{ Authorization }}"
+          body: "{{ request_payload }}"
+          force_basic_auth: false
+          status_code: 200
+          body_format: json
+          use_proxy: false
+          validate_certs: false
+          return_content: true
+        environment:
+          AWS_SESSION_TOKEN: "{{ aws_api_session_token }}"
+          AWS_ACCESS_KEY_ID: "{{ aws_api_access_key_id }}"
+          AWS_SECRET_ACCESS_KEY: "{{ aws_api_secret_access_key }}"
+        register: vault_creation_response
+        delegate_to: localhost
+
+````
+
+**Note:** The values for the `x-amz-date`, `x-amz-security-token` and `Authorization` request headers are obtained from the `aws_api_credentials` role.
+
+**Note:** The `envionment` variable values for the above task are obtained from the `aws_api_credentials` role.
+
+Finally, the value of the `BackupVaultArn` element in the API response is extracted and used to populate the `backup_vault_urn` variable
+that is made available to other jobs in the workflow using `set_stats`. Specifically, the job running the template for the `bootstrap_backup_plan.yml` playbook.
+
+````yaml
+      - name: Set vault info variable
+        ansible.builtin.set_fact:
+          vault_info: "{{ vault_creation_response.content | from_json }}"
+
+      - name: Set the ARN (Amazon Resource Name) of the vault
+        ansible.builtin.set_fact:
+          vault_arn: "{{ vault_info.BackupVaultArn }}"
+
+      - name: Set values to pass to workflow
+        ansible.builtin.set_stats:
+          data:
+            backup_vault_arn: "{{ vault_arn }}"
+````
+
 
 ### Creating Backup Plan
 
