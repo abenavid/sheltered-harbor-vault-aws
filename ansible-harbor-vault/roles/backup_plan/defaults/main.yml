@@ -6,3 +6,4 @@ backup_rule_schedule: cron(0 5 * * ? *)
 backup_cold_storage_days: 30
 backup_delete_after_days: 30
 backup_iam_role: arn:aws:iam::961341512032:role/service-role/AWSBackupDefaultServiceRole
+secondary_backup_vault_arn: placeholder
