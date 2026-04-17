@@ -7,20 +7,16 @@ The article frames three themes—**secure and immutable vault**, **air-gapped /
 ![AWS architecture diagram: secure data pipeline with Ingress, Analytics, Vault, Forensics, and Egress zones; data flows from ingestion to recovery via Direct Connect; Management Interface zone; shared services IAM, KMS, CloudWatch, CloudTrail, Macie, GuardDuty, and SNS.](docs/assets/sheltered-harbor-vault-architecture.png)
 
 
-**TODO: ADD info on how AWS Backup service and the use of logically air-gapped vaults satisfy the Sheltered Harbor standards.**
-
-
-
 ## How this maps to the reference architecture
 
 ### Secure and immutable data vault
 
-| Article concept                                                     | What this repo does                                                                                                                                                                                                              |
-|---------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Immutable storage / WORM (Object Lock)                              | The `backup_vault` role creates a logically air-gapped versioned bucket with Object Lock **COMPLIANCE** mode and a default retention period (`min_retention_days` and `max_retention_days` in `backup_vault/defaults/main.yml`). |
-| **TODO: Not sure about this one** Encryption at rest (e.g. SSE-KMS) | The vault/bucket uses **SSE-KMS** with the CMK created by the `kms` role (`encryption: aws:kms`, `encryption_key_id` from the key ARN).                                                                                          |
-| KMS for key control                                                 | The `kms` role provisions a **customer-managed** key (`kms_alias`, default `alias/sheltered-harbor-vault`).                                                                                                                      |
-| **TODO: Not Used** Security of the vault (IAM boundaries)           | The `iam_writer` role defines **VaultWriteRole** + **VaultWritePolicy**: `s3:PutObject` / `s3:PutObjectRetention` on the vault bucket prefix and `kms:Encrypt` / `kms:GenerateDataKey` on that CMK only.                         |
+| Article concept                   | What this repo does                                                                                                                                                                                                              |
+|-----------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Immutable storage / WORM (Object Lock) | The `backup_vault` role creates a logically air-gapped versioned bucket with Object Lock **COMPLIANCE** mode and a default retention period (`min_retention_days` and `max_retention_days` in `backup_vault/defaults/main.yml`). |
+| Encryption at rest (e.g. SSE-KMS) | The logically air-gapped vault uses **SSE-KMS** with the CMK created by the `kms` role (`encryption: aws:kms`, `encryption_key_id` from the key ARN).                                                                            |
+| KMS for key control               | The `kms` role provisions a **customer-managed** key (`kms_alias`, default `alias/sheltered-harbor-vault`).                                                                                                                      |
+| **TODO: Not Used** Security of the vault (IAM boundaries) | The `iam_writer` role defines **VaultWriteRole** + **VaultWritePolicy**: `s3:PutObject` / `s3:PutObjectRetention` on the vault bucket prefix and `kms:Encrypt` / `kms:GenerateDataKey` on that CMK only.                         |
 
 **TODO: Not Used but how does backup service handle this** **Encryption in transit:** The `s3_vault` role attaches a bucket policy that **denies all S3 actions** when `aws:SecureTransport` is false (requests not over HTTPS/TLS).
 
@@ -35,8 +31,22 @@ The article describes **separate AWS Organizations**, **cross-account IAM**, **D
 
 ### Forensic scanning of data
 
-**TODO: Replace with information on how GuardDuty scanning is enabled on logically air-gapped vaults using backup plans**
-The article mentions **GuardDuty Malware Protection for S3** and partner scanners. When `vault_forensic_scanning_enabled` is true, the `forensic_scanning` role enables **Malware Protection for S3** on the vault bucket (IAM role, malware protection plan, optional EventBridge→SNS and partner read role). Third-party scanners and org-wide policy remain your responsibility. **Malware protection plan creation** calls AWS `CreateMalwareProtectionPlan`, which requires **boto3 ≥ 1.42.54**; the role runs `pip install --user 'boto3>=1.42.54'` for the playbook Python unless you set `vault_forensic_scanning_upgrade_boto3: false` (then bake `ansible-harbor-vault/requirements-python.txt` into your execution environment).
+Amazon GuardDuty Malware Protection can be used with AWS Backup. You can automatically scan your backups for malware. 
+This integration helps you detect malicious code in your backups and identify clean recovery points for restore operations.
+Amazon GuardDuty Malware Protection supports two primary workflows for scanning your backups:
+
+- **Automatic malware scanning through backup plans:** Enable malware scanning in backup plans to automate malware detection with AWS Backup. 
+When enabled, AWS Backup automatically initiates an Amazon GuardDuty scan after each successful backup completion. 
+You can configure either full or incremental scanning for specific backup plan rules, which determines how frequently your backups are scanned. 
+For more information about scan types, see [Incremental vs full scans](https://docs.aws.amazon.com/aws-backup/latest/devguide/malware-protection.html#malware-scan-types). 
+AWS Backup recommends enabling automatic malware scanning in backup plans for proactive threat detection after backup creation.
+
+- **On-demand scans:** Run on-demand scans to manually scan existing backups, choosing between full or incremental scan types. 
+AWS Backup recommends using on-demand scans to identify your last clean backup. When scanning before a restore operation, 
+use a full scan to examine the entire backup with the latest threat detection model.
+
+In the `backup_plan` role the Jinja2 template `roles/backup_plan/files/backup_plan.j2` shows an example of the `ScanSettings` section
+where configuration can be added for GuardDuty malware scanning.
 
 ### Operational assurance (logging and monitoring)
 **TODO: Not Used**
@@ -80,7 +90,12 @@ All automation lives under **`ansible-harbor-vault/`**:
 
 ## Using AWS Backup Service As Sheltered Harbor Compliant Solution
 
-**TODO: Add paragraph or so on how AWS Backkup service is Sheltered Harbor Compliant and it could be used for the FairView solution.**  
+Organizations subject to the Sheltered Harbor standard require their data vaults to maintain immutability, provide isolation from production infrastructure, 
+and enable forensic validation of backup data integrity. AWS Backup logically air-gapped vault addresses these fundamental requirements through three key capabilities: 
+it maintains backup immutability using a compliance mode lock, provides isolation from production infrastructure through logical air-gapping, 
+and enables forensic validation of backup data integrity through seamless integration with AWS Backup restore testing.
+
+The following sections detail playbooks/roles used to leverage the AWS Backup service to implement the `Sheltered Harbor` standard.
 
 ### Signing Requests to AWS Services
 
@@ -320,20 +335,6 @@ ansible-navigator run playbooks/bootstrap_vault.yml \
 ## Prerequisites
 
 - Ansible with [amazon.aws](https://github.com/ansible-collections/amazon.aws) and [community.aws](https://github.com/ansible-collections/community.aws) installed (see `collections/requirements.yml` at the repo root, or `ansible-harbor-vault/requirements.yml` when working only in that directory).
-- **TODO: Some of these may not be relevant if using AWS Backup service** AWS credentials that can create KMS keys, S3 buckets (with Object Lock), IAM roles, CloudTrail, CloudWatch Logs/alarms, SNS, EventBridge, and GuardDuty in the target account (exact permissions depend on which optional roles you enable).
-- **TODO: This may not be relevant if using AWS Backup service** When **`vault_cloudtrail_cloudwatch_logs_enabled`** is true, the caller also needs **`iam:PassRole`** on the CloudTrail CloudWatch Logs role so CloudTrail can use that role. Example statement (replace account id and role name if you changed `vault_cloudtrail_cw_role_name`):
-
-  ```json
-  {
-    "Effect": "Allow",
-    "Action": "iam:PassRole",
-    "Resource": "arn:aws:iam::ACCOUNT_ID:role/CloudTrailCloudWatchLogsRole",
-    "Condition": {
-      "StringEquals": { "iam:PassedToService": "cloudtrail.amazonaws.com" }
-    }
-  }
-  ```
-- **TODO: This may not be relevant if using AWS Backup service** A unique globally available S3 bucket name (`vault_bucket_name`).
 
 ## Configuration
 
@@ -351,33 +352,7 @@ ansible-navigator run playbooks/bootstrap_vault.yml \
    ansible-galaxy collection install -r requirements.yml
    ```
 
-2. **Create `ansible-harbor-vault/.env`** with at least:
-
-   - `AWS_ACCESS_KEY_ID`
-   - `AWS_SECRET_ACCESS_KEY`
-   - `AWS_SESSION_TOKEN` (if using temporary credentials; optional otherwise)
-   - `AWS_DEFAULT_REGION` (optional; playbook can also use `aws_region` in group_vars)
-
-3. **TODO: This may not be relevant if using AWS Backup service** **Edit `ansible-harbor-vault/inventories/group_vars/all.yml`**: set `vault_bucket_name`, retention, region, `kms_alias`, and optionally `trusted_account_id` for cross-account **AssumeRole** from your writer account.
-
-## Run
-
-From `ansible-harbor-vault/`:
-
-
-**TODO: Not Used** ansible-playbook playbooks/bootstrap_vault.yml
-
-
-Optional isolation controls (after installing collections as above):
-
-
-**TODO: Not Used** ansible-playbook playbooks/bootstrap_network_isolation.yml
-
-
-Dry run:
-
-
-**TODO: Not Used** ansible-playbook playbooks/bootstrap_vault.yml --check
+2. **TODO: This may not be relevant if using AWS Backup service** **Edit `ansible-harbor-vault/inventories/group_vars/all.yml`**: set `vault_bucket_name`, retention, region, `kms_alias`, and optionally `trusted_account_id` for cross-account **AssumeRole** from your writer account.
 
 
 ---
