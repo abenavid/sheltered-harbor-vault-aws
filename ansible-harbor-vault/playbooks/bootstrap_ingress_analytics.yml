@@ -1,0 +1,40 @@
+---
+- hosts: localhost
+  gather_facts: false
+  # AAP/AWX often uses an inventory that is not inventories/localhost.yml, so
+  # inventory-adjacent group_vars/all.yml is never loaded. This file matches that vars.
+  vars_files:
+    - "{{ playbook_dir }}/../inventories/group_vars/all.yml"
+  pre_tasks:
+    - name: Prefer AWS_DEFAULT_REGION environment variable
+      ansible.builtin.set_fact:
+        aws_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default(aws_region | default('us-east-1')) }}"
+  tasks:
+    - name: Bootstrap vault
+      block:
+        - name: Get AWS account ID for IAM role trust policy
+          amazon.aws.aws_caller_info:
+          register: aws_caller
+
+        - name: Resolve trusted_account_id for VaultWriteRole
+          ansible.builtin.set_fact:
+            trusted_account_id: >-
+              {{
+                trusted_account_id
+                if (
+                  trusted_account_id is defined
+                  and (trusted_account_id | string | trim | length) > 0
+                  and (trusted_account_id | string) != '111111111111'
+                )
+                else aws_caller.account
+              }}
+
+        - ansible.builtin.include_role:
+            name: ../roles/ingress_analytics_zones
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+        AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+        AWS_SESSION_TOKEN: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('') }}"
+        AWS_DEFAULT_REGION: "{{ aws_region }}"
+        # Avoid printing AWS_* on the module command line when job verbosity is raised.
+      no_log: false

@@ -1,0 +1,265 @@
+---
+- name: Resolve account for ARNs
+  amazon.aws.aws_caller_info:
+  register: aws_caller
+
+- name: Create Ingress bucket
+  amazon.aws.s3_bucket:
+    name: "{{ application_name }}_ingress"
+    region: "{{ aws_region }}"
+    state: present
+    versioning: true
+    object_lock_enabled: false
+#    public_access:
+#      block_public_acls: true
+#      block_public_policy: true
+#      ignore_public_acls: true
+#      restrict_public_buckets: true
+#    encryption: aws:kms
+#    encryption_key_id: "{{ vault_kms_key_arn }}"
+    policy: "{{ ingress_bucket_tls_policy | to_json }}"
+  vars:
+    ingress_bucket_tls_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: DenyInsecureTransport
+          Effect: Deny
+          Principal: "*"
+          Action: "s3:*"
+          Resource:
+            - "arn:aws:s3:::{{ application_name }}_ingress"
+            - "arn:aws:s3:::{{ application_name }}_ingress/*"
+          Condition:
+            Bool:
+              "aws:SecureTransport": "false"
+  register: ingress_bucket
+
+- name: Create Analytics bucket
+  amazon.aws.s3_bucket:
+    name: "{{ application_name }}_analytics"
+    region: "{{ aws_region }}"
+    state: present
+    versioning: true
+    object_lock_enabled: false
+    #    public_access:
+    #      block_public_acls: true
+    #      block_public_policy: true
+    #      ignore_public_acls: true
+    #      restrict_public_buckets: true
+    #    encryption: aws:kms
+    #    encryption_key_id: "{{ vault_kms_key_arn }}"
+    policy: "{{ analytics_bucket_tls_policy | to_json }}"
+  vars:
+    analytics_bucket_tls_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: DenyInsecureTransport
+          Effect: Deny
+          Principal: "*"
+          Action: "s3:*"
+          Resource:
+            - "arn:aws:s3:::{{ application_name }}_analytics"
+            - "arn:aws:s3:::{{ application_name }}_analytics/*"
+          Condition:
+            Bool:
+              "aws:SecureTransport": "false"
+  register: analytics_bucket
+
+- name: Create IAM Managed Policy for object permissions for S3 Batch Copy
+  amazon.aws.iam_managed_policy:
+    policy_name: "Copy_{{ application_name }}_ManagedPolicy"
+    policy_description: "Managed policy for object permissions for s3 batch copy"
+    policy: "{{ s3_batch_copy_policy | to_json }}"
+    state: present
+  vars:
+    s3_batch_copy_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:GetObjectAcl
+            - s3:GetObjectVersionAcl
+            - s3:GetObjectTagging
+            - s3:GetObjectVersionTagging
+            - s3express:CreateSession
+          Resource:
+            - "{{ ingress_bucket.arn }}",
+            - "{{ ingress_bucket.arn }}/*"
+          Condition:
+            StringEquals:
+              aws:ResourceAccount:
+                - "{{ aws_caller.account }}"
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:PutObjectAcl
+            - s3:PutObjectTagging
+            - s3:PutObjectLegalHold
+            - s3:PutObjectRetention
+            - s3express:CreateSession
+            - s3:GetBucketObjectLockConfiguration
+          Resource:
+            - "{{ analytics_bucket.arn }}",
+            - "{{ analytics_bucket.arn }}/*"
+          Condition:
+            StringEquals:
+              aws:ResourceAccount:
+                - "{{ aws_caller.account }}"
+  register: copy_policy
+
+- name: Create IAM Managed Policy for generate manifest for S3 Batch Copy
+  amazon.aws.iam_managed_policy:
+    policy_name: "Manifest_{{ application_name }}_ManagedPolicy"
+    policy_description: "Managed policy for s3 batch copy manifest"
+    policy: "{{ s3_batch_copy_manifest_policy | to_json }}"
+    state: present
+  vars:
+    s3_batch_copy_manifest_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Action:
+            - s3:GetReplicationConfiguration
+            - s3:PutInventoryConfiguration
+          Resource:
+            - "{{ ingress_bucket.arn }}",
+          Condition:
+            StringEquals:
+              aws:ResourceAccount:
+                - "{{ aws_caller.account }}"
+  register: manifest_policy
+
+- name: Create IAM Managed Policy for kms permissions for S3 Batch Copy
+  amazon.aws.iam_managed_policy:
+    policy_name: "KMS_{{ application_name }}_ManagedPolicy"
+    policy_description: "Managed policy for kms permissions for s3 batch copy"
+    policy: "{{ s3_batch_copy_kms_policy | to_json }}"
+    state: present
+  vars:
+    s3_batch_copy_kms_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Sid: KMSPermissions
+          Action:
+            - kms:Decrypt
+            - kms:GenerateDataKey
+          Resource:
+            - "*",
+          Condition:
+            StringLike:
+              kms:ViaService:
+                - "s3.{{ aws_region }}.amazonaws.com"
+              kms:EncryptionContext:aws:s3:arn:
+                - "{{ ingress_bucket.arn }}",
+                - "{{ ingress_bucket.arn }}/*"
+                - "{{ analytics_bucket.arn }}",
+                - "{{ analytics_bucket.arn }}/*"
+  register: kms_policy
+
+- name: Create role for s3 copy operation
+  amazon.aws.iam_role:
+    name: S3BatchCopyRole
+    assume_role_policy_document:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: batchoperations.s3.amazonaws.com
+          Action: sts:AssumeRole
+    managed_policies:
+      - "{{ copy_policy.arn }}"
+      - "{{ manifest_policy.arn }}"
+      - "{{ kms_policy.arn }}"
+    state: present
+  register: copy_role
+
+- name: Package Lambda
+  ansible.builtin.archive:
+    path: "{{ role_path }}/files/lambda/handlercopy.py"
+    dest: /tmp/s3-copy-lambda.zip
+    format: zip
+  when: not ansible_check_mode
+
+- name: Lambda execution role
+  amazon.aws.iam_role:
+    name: S3CopyLambdaRole
+    assume_role_policy_document:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+    managed_policies:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    state: present
+  register: lambda_exec_role
+
+- name: Inline policy for Lambda to call CreateJob operation
+  amazon.aws.iam_policy:
+    iam_type: role
+    iam_name: S3CopyLambdaRole
+    policy_name: CreateS3CopyJobPolicy
+    policy_json: "{{ s3_copy_lambda_policy | to_json }}"
+    state: present
+  when: not ansible_check_mode
+  vars:
+    s3_copy_lambda_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Action:
+            - s3:CreateJob
+            - s3:DescribeJob
+            - s3:UpdateJobStatus
+            - s3:UpdateJobPriority
+          Resource: "arn:aws:s3:{{ aws_region }}:{{ aws_caller.account }}:job/*"
+        - Effect: Allow
+          Action:
+            - iam:PassRole
+            - iam:GetRole
+          Resource: "{{ copy_role.iam_role.arn }}"
+
+- name: Create S3 batch job Lambda function
+  amazon.aws.lambda:
+    name: CreateS3CopyJob
+    runtime: python3.12
+    handler: handlercopy.lambda_handler
+    role: "{{ lambda_exec_role.iam_role.arn }}"
+    zip_file: /tmp/s3-copy-lambda.zip
+    timeout: 60
+    memory_size: 128
+    environment_variables:
+      AWS_ACCOUNT_ID: "{{ aws_caller.account }}"
+      COPY_ROLE_ARN: ""
+      SOURCE_BUCKET_ARN: ""
+      DEST_BUCKET_ARN: ""
+    region: "{{ aws_region }}"
+    state: present
+  register: s3_create_copy_job_lambda
+  when: not ansible_check_mode
+
+- name: EventBridge rule — create copy job
+  amazon.aws.cloudwatchevent_rule:
+    name: create-copy-job-rule
+    schedule_expression: "{{ create_copy_job_cron }}"
+    state: present
+    region: "{{ aws_region }}"
+    targets:
+      - id: CreateCopyJob
+        arn: "{{ s3_create_copy_job_lambda.function_arn }}"
+  register: rule_create_copy_job
+  when: not ansible_check_mode
+
+- name: Allow EventBridge to invoke Lambda (open rule)
+  amazon.aws.lambda_policy:
+    function_name: CreateS3CopyJob
+    action: lambda:InvokeFunction
+    principal: events.amazonaws.com
+    statement_id: create-copy-job-execute
+    source_arn: "{{ rule_create_copy_job.rule.arn }}"
+  when: not ansible_check_mode
+
