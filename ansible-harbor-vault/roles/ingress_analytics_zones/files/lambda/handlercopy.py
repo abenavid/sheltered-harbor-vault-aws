@@ -1,34 +1,45 @@
 import boto3
+import os
 
-def lambda_handler(event, context):
-    s3_control = boto3.client('s3control')
-    account_id = os.environ["AWS_ACCOUNT_ID"]
-    copy_role_arn = os.environ["COPY_ROLE_ARN"]
+# S3Control is used for Batch Operations
+s3_control = boto3.client('s3control')
 
+# Configuration parameters
+ACCOUNT_ID = os.environ("AWS_ACCOUNT_ID")  # Your AWS Account ID
+COPY_ROLE_ARN = os.environ("COPY_ROLE_ARN")
+DEST_BUCKET_ARN = os.environ("DEST_BUCKET_ARN")
+SOURCE_BUCKET_ARN = os.environ("SOURCE_BUCKET_ARN")
+
+def create_s3_batch_copy_job():
     response = s3_control.create_job(
-        AccountId=account_id,
+        AccountId=ACCOUNT_ID,
         ConfirmationRequired=False,
         Operation={
-            'LambdaInvoke': {
-                'FunctionArn': 'arn:aws:lambda:region:account-id:function:process-object'
+            'S3PutObjectCopy': {
+                'TargetResource': DEST_BUCKET_ARN,
+                'StorageClass': 'STANDARD',
+                'MetadataDirective': 'COPY'
             }
         },
-        Manifest={
-            'Spec': {'Format': 'S3BatchOperations_CSV_20180820'},
-            'Location': {
-                'ObjectArn': 'arn:aws:s3:::my-bucket/manifest.csv',
-                'ETag': 'manifest-file-etag'
-            }
+        ManifestGenerator={
+            'EnableManifestOutput': False,
+            'SourceBucket': SOURCE_BUCKET_ARN,
+            'ExpectedBucketOwner', # Optional
+            'Filter', # Optional
+            'ManifestOutputLocation' # Optional
         },
         Report={
-            'Bucket': 'arn:aws:s3:::my-report-bucket',
-            'Format': 'Report_CSV_20180820',
-            'Enabled': True,
-            'Prefix': 'batch-reports',
-            'ReportScope': 'AllTasks'
+#             'Bucket': 'arn:aws:s3:::job-reports-bucket',
+#             'Format': 'Report_CSV_20180820',
+            'Enabled': False
+#             'Prefix': 'batch-copy-reports',
+#             'ReportScope': 'AllTasks'
         },
         Priority=10,
-        RoleArn=copy_role_arn
+        RoleArn=COPY_ROLE_ARN
     )
-    return response
+    return response['JobId']
+
+job_id = create_s3_batch_copy_job()
+print(f"Created Batch Job ID: {job_id}")
 
