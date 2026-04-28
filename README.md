@@ -200,7 +200,7 @@ The ansible role or playbook that is using the `aws_api_credentials` role then u
 
 ### Creating Logically Air-gapped Vault
 
-The `backup_vault` role was created o create a logically air-gapped vault in the AWS Backup service. The following details
+The `backup_vault` role was created to create a logically air-gapped vault in the AWS Backup service. The following details
 the tasks in the `backup_vault` role.
 
 To create the logically air-gapped vault, a request is made to the AWS Backup service API. The documentation for the 
@@ -212,7 +212,7 @@ AWS Signature Version 4 (SigV4) is the AWS signing protocol for adding authentic
 
 For this reason, the `aws_api_credentials` roles was created as described above.
 
-The first task forthe `backup_vault` role is to create facts required by the `aws_api_credentials` role and the `uri` module used
+The first task for the `backup_vault` role is to create facts required by the `aws_api_credentials` role and the `uri` module used
 to make the request to the AWS Backup service API. The following are the required facts.
 
 ```yaml
@@ -295,6 +295,42 @@ that is made available to other jobs in the workflow using `set_stats`. Specific
 
 ### Creating Backup Plan
 
+The backup_plan role was created to create a backup plan in the AWS Backup service. The following details the tasks in the backup_plan role.
+
+To create a backup plan, a request is made using the AWS cli utility. AWSCLI2 is baked into the Fairview AWS EE (which is built from the drew-ee directory of this repository). This request makes use of options found at the [Backup Plan AWS CLI Documentation](https://docs.aws.amazon.com/cli/latest/reference/backup/create-backup-plan.html) and makes use of vaults previously created in AWS Backup by the backup_vault role in an AAP workflow.
+
+A default variables are established in the defaults directory of the role, and a template is created from jinja found in the files directory and dropped into the execution environment at runtime.
+
+````yaml
+- name: Create yaml file on localhost
+  ansible.builtin.template:
+    src: files/backup_plan.j2
+    dest: backup_plan.yml
+  delegate_to: localhost
+````
+
+This newly created backup_plan.yml is used in a aws cli command to designate specific components of the target net new backup plan.
+
+````yaml
+- name: Create logically air-gapped Backup Vault Plan
+  ansible.builtin.shell: |
+    aws backup create-backup-plan --region {{ aws_region }} --cli-input-yaml file://backup_plan.yml
+  delegate_to: localhost
+````
+
+With the creation of the new plan, all that remains is to allocate a resource for the new plan to back up a targeted vault.
+
+````yaml
+- name: Assign resources to the backup plan using tags
+  amazon.aws.backup_selection:
+    plan_name: "{{ backup_plan_name }}"
+    selection_name: "{{ backup_resource_name }}"
+    iam_role_arn: "{{ backup_iam_role }}"
+    resources:
+      - "{{ backup_resource_arn }}"
+    state: present
+  register: selection_result
+````
 
 
 ## Execution environment (container image)
