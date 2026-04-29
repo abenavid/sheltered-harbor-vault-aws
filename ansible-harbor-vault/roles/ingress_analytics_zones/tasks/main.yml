@@ -27,8 +27,8 @@
           Principal: "*"
           Action: "s3:*"
           Resource:
-            - "arn:aws:s3:::{{ application_name }}_ingress"
-            - "arn:aws:s3:::{{ application_name }}_ingress/*"
+            - "arn:aws:s3:::{{ application_name }}-ingress"
+            - "arn:aws:s3:::{{ application_name }}-ingress/*"
           Condition:
             Bool:
               "aws:SecureTransport": "false"
@@ -58,8 +58,8 @@
           Principal: "*"
           Action: "s3:*"
           Resource:
-            - "arn:aws:s3:::{{ application_name }}_analytics"
-            - "arn:aws:s3:::{{ application_name }}_analytics/*"
+            - "arn:aws:s3:::{{ application_name }}-analytics"
+            - "arn:aws:s3:::{{ application_name }}-analytics/*"
           Condition:
             Bool:
               "aws:SecureTransport": "false"
@@ -67,7 +67,7 @@
 
 - name: Create IAM Managed Policy for object permissions for S3 Batch Copy
   amazon.aws.iam_managed_policy:
-    policy_name: "Copy_{{ application_name }}_ManagedPolicy"
+    policy_name: "Copy-{{ application_name }}-ManagedPolicy"
     policy_description: "Managed policy for object permissions for s3 batch copy"
     policy: "{{ s3_batch_copy_policy | to_json }}"
     state: present
@@ -111,7 +111,7 @@
 
 - name: Create IAM Managed Policy for generate manifest for S3 Batch Copy
   amazon.aws.iam_managed_policy:
-    policy_name: "Manifest_{{ application_name }}_ManagedPolicy"
+    policy_name: "Manifest-{{ application_name }}-ManagedPolicy"
     policy_description: "Managed policy for s3 batch copy manifest"
     policy: "{{ s3_batch_copy_manifest_policy | to_json }}"
     state: present
@@ -133,7 +133,7 @@
 
 - name: Create IAM Managed Policy for kms permissions for S3 Batch Copy
   amazon.aws.iam_managed_policy:
-    policy_name: "KMS_{{ application_name }}_ManagedPolicy"
+    policy_name: "KMS-{{ application_name }}-ManagedPolicy"
     policy_description: "Managed policy for kms permissions for s3 batch copy"
     policy: "{{ s3_batch_copy_kms_policy | to_json }}"
     state: present
