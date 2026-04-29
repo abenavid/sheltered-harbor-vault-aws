@@ -176,12 +176,20 @@
     state: present
   register: copy_role
 
+#- name: Package Lambda
+#  ansible.builtin.archive:
+#    path: "{{ role_path }}/files/lambda/handlercopy.py"
+#    dest: /tmp/s3-copy-lambda.zip
+#    format: zip
+#  when: not ansible_check_mode
+
 - name: Package Lambda
-  ansible.builtin.archive:
-    path: "{{ role_path }}/files/lambda/handlercopy.py"
-    dest: /tmp/s3-copy-lambda.zip
-    format: zip
-  when: not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - zip
+      - -r /tmp/s3-copy-lambda.zip
+      - "{{ role_path }}/files/lambda/handlercopy.py"
+  delegate_to: localhost
 
 - name: Lambda execution role
   amazon.aws.iam_role:
