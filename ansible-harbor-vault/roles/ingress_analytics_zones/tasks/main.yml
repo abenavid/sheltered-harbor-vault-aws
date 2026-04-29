@@ -85,8 +85,8 @@
             - s3:GetObjectVersionTagging
             - s3express:CreateSession
           Resource:
-            - "{{ arn:aws:s3:::{{ application_name }}-ingress }}"
-            - "{{ arn:aws:s3:::{{ application_name }}-ingress }}/*"
+            - "arn:aws:s3:::{{ application_name }}-ingress"
+            - "arn:aws:s3:::{{ application_name }}-ingress/*"
           Condition:
             StringEquals:
               "aws:ResourceAccount": "{{ aws_caller.account }}"
@@ -100,8 +100,8 @@
             - s3express:CreateSession
             - s3:GetBucketObjectLockConfiguration
           Resource:
-            - "{{ arn:aws:s3:::{{ application_name }}-analytics }}"
-            - "{{ arn:aws:s3:::{{ application_name }}-analytics }}/*"
+            - "arn:aws:s3:::{{ application_name }}-analytics"
+            - "arn:aws:s3:::{{ application_name }}-analytics/*"
           Condition:
             StringEquals:
               "aws:ResourceAccount": "{{ aws_caller.account }}"
@@ -122,7 +122,7 @@
             - s3:GetReplicationConfiguration
             - s3:PutInventoryConfiguration
           Resource:
-            - "{{ arn:aws:s3:::{{ application_name }}-ingress }}"
+            - "arn:aws:s3:::{{ application_name }}-ingress"
           Condition:
             StringEquals:
               "aws:ResourceAccount": "{{ aws_caller.account }}"
@@ -149,10 +149,10 @@
             StringLike:
               "kms:ViaService": "s3.{{ aws_region }}.amazonaws.com"
               "kms:EncryptionContext:aws:s3:arn":
-                - "{{ arn:aws:s3:::{{ application_name }}-ingress }}"
-                - "{{ arn:aws:s3:::{{ application_name }}-ingress }}/*"
-                - "{{ arn:aws:s3:::{{ application_name }}-analytics }}"
-                - "{{ arn:aws:s3:::{{ application_name }}-analytics }}/*"
+                - "arn:aws:s3:::{{ application_name }}-ingress"
+                - "arn:aws:s3:::{{ application_name }}-ingress/*"
+                - "arn:aws:s3:::{{ application_name }}-analytics"
+                - "arn:aws:s3:::{{ application_name }}-analytics/*"
   register: kms_policy
 
 - name: Create role for s3 copy operation
@@ -239,8 +239,8 @@
     environment_variables:
       AWS_ACCOUNT_ID: "{{ aws_caller.account }}"
       COPY_ROLE_ARN: "{{ copy_role.iam_role.arn }}"
-      SOURCE_BUCKET_ARN: "{{ arn:aws:s3:::{{ application_name }}-ingress }}"
-      DEST_BUCKET_ARN: "{{ arn:aws:s3:::{{ application_name }}-analytics }}"
+      SOURCE_BUCKET_ARN: "arn:aws:s3:::{{ application_name }}-ingress"
+      DEST_BUCKET_ARN: "arn:aws:s3:::{{ application_name }}-analytics"
     region: "{{ aws_region }}"
     state: present
   register: s3_create_copy_job_lambda
