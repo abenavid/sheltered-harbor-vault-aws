@@ -5,7 +5,7 @@
 
 - name: Create Ingress bucket
   amazon.aws.s3_bucket:
-    name: "{{ application_name }}_ingress"
+    name: "{{ application_name }}-ingress"
     region: "{{ aws_region }}"
     state: present
     versioning: true
@@ -36,7 +36,7 @@
 
 - name: Create Analytics bucket
   amazon.aws.s3_bucket:
-    name: "{{ application_name }}_analytics"
+    name: "{{ application_name }}-analytics"
     region: "{{ aws_region }}"
     state: present
     versioning: true
