@@ -178,6 +178,11 @@
 #    dest: /tmp/s3-copy-lambda.zip
 #    format: zip
 #  when: not ansible_check_mode
+- name: Install zip
+  ansible.builtin.dnf:
+    name: zip
+    state: present
+  delegate_to: localhost
 
 - name: Package Lambda
   ansible.builtin.command:
