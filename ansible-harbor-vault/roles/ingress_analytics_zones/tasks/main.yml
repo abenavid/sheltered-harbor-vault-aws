@@ -179,7 +179,7 @@
 #    format: zip
 #  when: not ansible_check_mode
 - name: Install zip
-  ansible.builtin.dnf:
+  ansible.builtin.microdnf:
     name: zip
     state: present
   delegate_to: localhost
