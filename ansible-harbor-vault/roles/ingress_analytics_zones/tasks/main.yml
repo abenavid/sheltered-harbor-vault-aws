@@ -153,9 +153,9 @@
               kms:ViaService:
                 - "s3.{{ aws_region }}.amazonaws.com"
               kms:EncryptionContext:aws:s3:arn:
-                - "{{ ingress_bucket.arn }}",
+                - "{{ ingress_bucket.arn }}"
                 - "{{ ingress_bucket.arn }}/*"
-                - "{{ analytics_bucket.arn }}",
+                - "{{ analytics_bucket.arn }}"
                 - "{{ analytics_bucket.arn }}/*"
   register: kms_policy
 
