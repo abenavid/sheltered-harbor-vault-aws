@@ -85,7 +85,7 @@
             - s3:GetObjectVersionTagging
             - s3express:CreateSession
           Resource:
-            - "{{ ingress_bucket.arn }}",
+            - "{{ ingress_bucket.arn }}"
             - "{{ ingress_bucket.arn }}/*"
           Condition:
             StringEquals:
@@ -101,7 +101,7 @@
             - s3express:CreateSession
             - s3:GetBucketObjectLockConfiguration
           Resource:
-            - "{{ analytics_bucket.arn }}",
+            - "{{ analytics_bucket.arn }}"
             - "{{ analytics_bucket.arn }}/*"
           Condition:
             StringEquals:
@@ -124,7 +124,7 @@
             - s3:GetReplicationConfiguration
             - s3:PutInventoryConfiguration
           Resource:
-            - "{{ ingress_bucket.arn }}",
+            - "{{ ingress_bucket.arn }}"
           Condition:
             StringEquals:
               aws:ResourceAccount:
@@ -147,7 +147,7 @@
             - kms:Decrypt
             - kms:GenerateDataKey
           Resource:
-            - "*",
+            - "*"
           Condition:
             StringLike:
               kms:ViaService:
