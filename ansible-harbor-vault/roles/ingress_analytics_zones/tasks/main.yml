@@ -170,9 +170,9 @@
             Service: batchoperations.s3.amazonaws.com
           Action: sts:AssumeRole
     managed_policies:
-      - "{{ copy_policy.arn }}"
-      - "{{ manifest_policy.arn }}"
-      - "{{ kms_policy.arn }}"
+      - "{{ copy_policy.policy.arn }}"
+      - "{{ manifest_policy.policy.arn }}"
+      - "{{ kms_policy.policy.arn }}"
     state: present
   register: copy_role
 
@@ -225,7 +225,7 @@
 
 - name: Create S3 batch job Lambda function
   amazon.aws.lambda:
-    name: CreateS3CopyJob
+    name: "CreateS3CopyJob-{{ application_name }}"
     runtime: python3.12
     handler: handlercopy.lambda_handler
     role: "{{ lambda_exec_role.iam_role.arn }}"
@@ -244,7 +244,7 @@
 
 - name: EventBridge rule — create copy job
   amazon.aws.cloudwatchevent_rule:
-    name: create-copy-job-rule
+    name: "create-copy-job-rule-{{ application_name }}"
     schedule_expression: "{{ create_copy_job_cron }}"
     state: present
     region: "{{ aws_region }}"
@@ -254,12 +254,12 @@
   register: rule_create_copy_job
   when: not ansible_check_mode
 
-- name: Allow EventBridge to invoke Lambda (open rule)
+- name: Allow EventBridge to invoke Lambda (create copy job rule)
   amazon.aws.lambda_policy:
-    function_name: CreateS3CopyJob
+    function_name: "CreateS3CopyJob-{{ application_name }}"
     action: lambda:InvokeFunction
     principal: events.amazonaws.com
-    statement_id: create-copy-job-execute
+    statement_id: "create-copy-job-execute-{{ application_name }}"
     source_arn: "{{ rule_create_copy_job.rule.arn }}"
   when: not ansible_check_mode
 

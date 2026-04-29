@@ -23,10 +23,10 @@ def create_s3_batch_copy_job():
         },
         ManifestGenerator={
             'EnableManifestOutput': False,
-            'SourceBucket': SOURCE_BUCKET_ARN,
-            'ExpectedBucketOwner', # Optional
-            'Filter', # Optional
-            'ManifestOutputLocation' # Optional
+            'SourceBucket': SOURCE_BUCKET_ARN
+#             'ExpectedBucketOwner': '',
+#             'Filter': '',
+#             'ManifestOutputLocation': ''
         },
         Report={
 #             'Bucket': 'arn:aws:s3:::job-reports-bucket',

@@ -1,3 +1,2 @@
 ---
-vault_write_window_open_cron: "cron(0 9 * * ? *)"
-vault_write_window_close_cron: "cron(0 17 * * ? *)"
+create_copy_job_cron: "cron(0,30 * * * *)"
