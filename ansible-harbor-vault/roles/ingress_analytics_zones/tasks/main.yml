@@ -89,8 +89,7 @@
             - "{{ arn:aws:s3:::{{ application_name }}-ingress }}/*"
           Condition:
             StringEquals:
-              aws:ResourceAccount:
-                - "{{ aws_caller.account }}"
+              "aws:ResourceAccount": "{{ aws_caller.account }}"
         - Effect: Allow
           Action:
             - s3:PutObject
@@ -105,8 +104,7 @@
             - "{{ arn:aws:s3:::{{ application_name }}-analytics }}/*"
           Condition:
             StringEquals:
-              aws:ResourceAccount:
-                - "{{ aws_caller.account }}"
+              "aws:ResourceAccount": "{{ aws_caller.account }}"
   register: copy_policy
 
 - name: Create IAM Managed Policy for generate manifest for S3 Batch Copy
@@ -127,8 +125,7 @@
             - "{{ arn:aws:s3:::{{ application_name }}-ingress }}"
           Condition:
             StringEquals:
-              aws:ResourceAccount:
-                - "{{ aws_caller.account }}"
+              "aws:ResourceAccount": "{{ aws_caller.account }}"
   register: manifest_policy
 
 - name: Create IAM Managed Policy for kms permissions for S3 Batch Copy
@@ -150,9 +147,8 @@
             - "*"
           Condition:
             StringLike:
-              kms:ViaService:
-                - "s3.{{ aws_region }}.amazonaws.com"
-              kms:EncryptionContext:aws:s3:arn:
+              "kms:ViaService": "s3.{{ aws_region }}.amazonaws.com"
+              "kms:EncryptionContext:aws:s3:arn":
                 - "{{ arn:aws:s3:::{{ application_name }}-ingress }}"
                 - "{{ arn:aws:s3:::{{ application_name }}-ingress }}/*"
                 - "{{ arn:aws:s3:::{{ application_name }}-analytics }}"
