@@ -40,6 +40,3 @@ def create_s3_batch_copy_job():
     )
     return response['JobId']
 
-job_id = create_s3_batch_copy_job()
-print(f"Created Batch Job ID: {job_id}")
-
