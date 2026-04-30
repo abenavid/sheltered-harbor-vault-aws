@@ -224,7 +224,7 @@
 
 - name: Create S3 batch job Lambda function
   amazon.aws.lambda:
-    name: "CreateS3CopyJob"
+    name: CreateS3CopyJob
     runtime: python3.12
     handler: handlercopy.lambda_handler
     role: "{{ lambda_exec_role.iam_role.arn }}"
@@ -256,10 +256,10 @@
 - name: Allow EventBridge to invoke Lambda (create copy job rule)
   amazon.aws.lambda_policy:
     state: present
-    function_name: "CreateS3CopyJob"
+    function_name: CreateS3CopyJob
     action: lambda:InvokeFunction
     principal: events.amazonaws.com
-    statement_id: "create-copy-job-execute"
+    statement_id: create-copy-job-execute
     source_arn: "{{ rule_create_copy_job.rule.arn }}"
   when: not ansible_check_mode
 
