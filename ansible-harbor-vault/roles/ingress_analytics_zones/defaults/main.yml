@@ -1,2 +1,2 @@
 ---
-create_copy_job_cron: "cron(0,30 * * * *)"
+create_copy_job_cron: "cron(0,30 * * * ? *)"
