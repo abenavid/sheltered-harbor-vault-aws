@@ -249,7 +249,7 @@
     region: "{{ aws_region }}"
     targets:
       - id: CreateCopyJob
-        arn: "{{ s3_create_copy_job_lambda.function_arn }}"
+        arn: "{{ s3_create_copy_job_lambda.configuration.function_arn }}"
   register: rule_create_copy_job
   when: not ansible_check_mode
 
