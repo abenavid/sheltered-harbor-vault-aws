@@ -226,7 +226,7 @@
   amazon.aws.lambda:
     name: "CreateS3CopyJob"
     runtime: python3.12
-    handler: handlercopy.create_s3_batch_copy_job
+    handler: handlercopy.lambda_handler
     role: "{{ lambda_exec_role.iam_role.arn }}"
     zip_file: /tmp/s3-copy-lambda.zip
     timeout: 60

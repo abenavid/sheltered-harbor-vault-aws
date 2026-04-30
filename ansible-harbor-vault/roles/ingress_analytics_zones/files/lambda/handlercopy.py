@@ -5,12 +5,12 @@ import os
 s3_control = boto3.client('s3control')
 
 # Configuration parameters
-ACCOUNT_ID = os.environ("AWS_ACCOUNT_ID")  # Your AWS Account ID
-COPY_ROLE_ARN = os.environ("COPY_ROLE_ARN")
-DEST_BUCKET_ARN = os.environ("DEST_BUCKET_ARN")
-SOURCE_BUCKET_ARN = os.environ("SOURCE_BUCKET_ARN")
+ACCOUNT_ID = os.environ['AWS_ACCOUNT_ID']
+COPY_ROLE_ARN = os.environ['COPY_ROLE_ARN']
+DEST_BUCKET_ARN = os.environ['DEST_BUCKET_ARN']
+SOURCE_BUCKET_ARN = os.environ['SOURCE_BUCKET_ARN']
 
-def create_s3_batch_copy_job():
+def lambda_handler(event, context):
     response = s3_control.create_job(
         AccountId=ACCOUNT_ID,
         ConfirmationRequired=False,
