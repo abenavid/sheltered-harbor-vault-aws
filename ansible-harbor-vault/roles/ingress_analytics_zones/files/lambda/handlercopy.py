@@ -22,11 +22,13 @@ def create_copy_job():
             }
         },
         ManifestGenerator={
-            'EnableManifestOutput': False,
-            'SourceBucket': SOURCE_BUCKET_ARN
-#             'ExpectedBucketOwner': '',
-#             'Filter': '',
-#             'ManifestOutputLocation': ''
+            'S3JobManifestGenerator': {
+                'EnableManifestOutput': False,
+                'SourceBucket': SOURCE_BUCKET_ARN
+#               'ExpectedBucketOwner': '',
+#               'Filter': '',
+#               'ManifestOutputLocation': ''
+            }
         },
         Report={
 #             'Bucket': 'arn:aws:s3:::job-reports-bucket',
