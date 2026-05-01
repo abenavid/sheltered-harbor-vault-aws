@@ -241,6 +241,15 @@
   register: s3_create_copy_job_lambda
   when: not ansible_check_mode
 
+- name: Create production alias
+  amazon.aws.lambda_alias:
+    function_name: CreateS3CopyJob
+    name: test
+    function_version: "{{ s3_create_copy_job_lambda.configuration.version }}"
+    region: "{{ aws_region }}"
+    state: present
+  register: lambda_function_alias
+
 - name: EventBridge rule — create copy job
   amazon.aws.cloudwatchevent_rule:
     name: "create-copy-job-rule-{{ application_name }}"
@@ -249,7 +258,7 @@
     region: "{{ aws_region }}"
     targets:
       - id: CreateCopyJob
-        arn: "{{ s3_create_copy_job_lambda.configuration.function_arn }}"
+        arn: "{{ lambda_function_alias.alias_arn }}"
   register: rule_create_copy_job
   when: not ansible_check_mode
 
@@ -257,6 +266,7 @@
   amazon.aws.lambda_policy:
     state: present
     function_name: CreateS3CopyJob
+    alias: test
     action: lambda:InvokeFunction
     principal: events.amazonaws.com
     statement_id: create-copy-job-execute
