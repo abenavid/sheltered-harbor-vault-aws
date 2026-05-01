@@ -245,7 +245,7 @@
   amazon.aws.lambda_alias:
     function_name: CreateS3CopyJob
     name: test
-    function_version: "{{ s3_create_copy_job_lambda.configuration.version }}"
+    function_version: "{{ s3_create_copy_job_lambda.configuration.version | int }}"
     region: "{{ aws_region }}"
     state: present
   register: lambda_function_alias
