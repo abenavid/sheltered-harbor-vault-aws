@@ -10,8 +10,8 @@ COPY_ROLE_ARN = os.environ['COPY_ROLE_ARN']
 DEST_BUCKET_ARN = os.environ['DEST_BUCKET_ARN']
 SOURCE_BUCKET_ARN = os.environ['SOURCE_BUCKET_ARN']
 
-def lambda_handler():
-    response = s3_control.create_job(
+def create_copy_job():
+    s3_control.create_job(
         AccountId=ACCOUNT_ID,
         ConfirmationRequired=False,
         Operation={
@@ -38,5 +38,5 @@ def lambda_handler():
         Priority=10,
         RoleArn=COPY_ROLE_ARN
     )
-    return response['JobId']
 
+create_copy_job()
