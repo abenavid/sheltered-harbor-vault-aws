@@ -24,9 +24,9 @@ def create_copy_job():
         ManifestGenerator={
             'S3JobManifestGenerator': {
                 'EnableManifestOutput': False,
-                'SourceBucket': SOURCE_BUCKET_ARN
+                'SourceBucket': SOURCE_BUCKET_ARN,
 #               'ExpectedBucketOwner': '',
-#               'Filter': '',
+                'Filter': ''
 #               'ManifestOutputLocation': ''
             }
         },
