@@ -10,7 +10,7 @@ COPY_ROLE_ARN = os.environ['COPY_ROLE_ARN']
 DEST_BUCKET_ARN = os.environ['DEST_BUCKET_ARN']
 SOURCE_BUCKET_ARN = os.environ['SOURCE_BUCKET_ARN']
 
-def create_copy_job():
+def create_copy_job(event, context):
     s3_control.create_job(
         AccountId=ACCOUNT_ID,
         ConfirmationRequired=False,
@@ -41,4 +41,4 @@ def create_copy_job():
         RoleArn=COPY_ROLE_ARN
     )
 
-create_copy_job()
+#create_copy_job(event, context)
