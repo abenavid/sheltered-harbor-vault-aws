@@ -24,18 +24,11 @@ def create_copy_job(event, context):
         ManifestGenerator={
             'S3JobManifestGenerator': {
                 'EnableManifestOutput': False,
-                'SourceBucket': SOURCE_BUCKET_ARN,
-#               'ExpectedBucketOwner': '',
-                'Filter': ''
-#               'ManifestOutputLocation': ''
+                'SourceBucket': SOURCE_BUCKET_ARN
             }
         },
         Report={
-#             'Bucket': 'arn:aws:s3:::job-reports-bucket',
-#             'Format': 'Report_CSV_20180820',
             'Enabled': False
-#             'Prefix': 'batch-copy-reports',
-#             'ReportScope': 'AllTasks'
         },
         Priority=10,
         RoleArn=COPY_ROLE_ARN
