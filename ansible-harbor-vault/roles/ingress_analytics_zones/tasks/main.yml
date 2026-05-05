@@ -241,7 +241,7 @@
   register: s3_create_copy_job_lambda
   when: not ansible_check_mode
 
-- name: Create production alias
+- name: Create lambda function alias
   amazon.aws.lambda_alias:
     function_name: CreateS3CopyJob
     name: test
