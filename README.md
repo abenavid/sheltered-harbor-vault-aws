@@ -332,6 +332,279 @@ With the creation of the new plan, all that remains is to allocate a resource fo
   register: selection_result
 ````
 
+### Provisioning Ingress and Analytics Zones
+
+According to the Sheltered Harbor standard the Ingress zone is the raw data from the input source is first copied and stored in this zone. 
+This zone contains different ways of sourcing data and storing it in an encrypted S3 bucket with the right security controls using IAM. 
+This zone is ephemeral in nature so as to provide a digital air gap to the vault architecture.
+
+According to the Sheltered Harbor standard the Analytics zone is the raw data must be analyzed to make sure that the corrupt data isn’t transmitted 
+to the cyber vault. You can use services such as Macie to identify corrupt data, or write your own custom logic using AWS Lambda functions.
+
+The `ingress_analytics_zones` role provisions s3 buckets for the ingress and analytics zones and creates policies/roles for creating the
+s3 batch operation to copy contents of ingress bucket to analytics bucket on a configured schedule triggered by a cloudwatch event that 
+triggers the execution of the lambda function that creates the s3 operations batch job.
+
+The following details the tasks performed by the `ingress_analytics_zones` role.
+
+The following tasks create the s3 buckets for the Ingress and Analytics zones.
+
+````yaml
+- name: Create Ingress bucket
+  amazon.aws.s3_bucket:
+    name: "{{ application_name }}-ingress"
+    region: "{{ aws_region }}"
+    state: present
+    versioning: true
+    object_lock_enabled: false
+#    public_access:
+#      block_public_acls: true
+#      block_public_policy: true
+#      ignore_public_acls: true
+#      restrict_public_buckets: true
+#    encryption: aws:kms
+#    encryption_key_id: "{{ vault_kms_key_arn }}"
+    policy: "{{ ingress_bucket_tls_policy | to_json }}"
+  vars:
+    ingress_bucket_tls_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: DenyInsecureTransport
+          Effect: Deny
+          Principal: "*"
+          Action: "s3:*"
+          Resource:
+            - "arn:aws:s3:::{{ application_name }}-ingress"
+            - "arn:aws:s3:::{{ application_name }}-ingress/*"
+          Condition:
+            Bool:
+              "aws:SecureTransport": "false"
+  register: ingress_bucket
+
+- name: Create Analytics bucket
+  amazon.aws.s3_bucket:
+    name: "{{ application_name }}-analytics"
+    region: "{{ aws_region }}"
+    state: present
+    versioning: true
+    object_lock_enabled: false
+    #    public_access:
+    #      block_public_acls: true
+    #      block_public_policy: true
+    #      ignore_public_acls: true
+    #      restrict_public_buckets: true
+    #    encryption: aws:kms
+    #    encryption_key_id: "{{ vault_kms_key_arn }}"
+    policy: "{{ analytics_bucket_tls_policy | to_json }}"
+  vars:
+    analytics_bucket_tls_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: DenyInsecureTransport
+          Effect: Deny
+          Principal: "*"
+          Action: "s3:*"
+          Resource:
+            - "arn:aws:s3:::{{ application_name }}-analytics"
+            - "arn:aws:s3:::{{ application_name }}-analytics/*"
+          Condition:
+            Bool:
+              "aws:SecureTransport": "false"
+  register: analytics_bucket
+
+````
+
+The following tasks create the managed policies required by the role used to run the s3 batch operation copy job.
+
+````yaml
+- name: Create IAM Managed Policy for object permissions for S3 Batch Copy
+  amazon.aws.iam_managed_policy:
+    policy_name: "Copy-{{ application_name }}-ManagedPolicy"
+    policy_description: "Managed policy for object permissions for s3 batch copy"
+    policy: "{{ s3_batch_copy_policy | to_json }}"
+    state: present
+  vars:
+    s3_batch_copy_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            - s3:GetObjectAcl
+            - s3:GetObjectVersionAcl
+            - s3:GetObjectTagging
+            - s3:GetObjectVersionTagging
+            - s3express:CreateSession
+          Resource:
+            - "arn:aws:s3:::{{ application_name }}-ingress"
+            - "arn:aws:s3:::{{ application_name }}-ingress/*"
+          Condition:
+            StringEquals:
+              "aws:ResourceAccount": "{{ aws_caller.account }}"
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:PutObjectAcl
+            - s3:PutObjectTagging
+            - s3:PutObjectLegalHold
+            - s3:PutObjectRetention
+            - s3express:CreateSession
+            - s3:GetBucketObjectLockConfiguration
+          Resource:
+            - "arn:aws:s3:::{{ application_name }}-analytics"
+            - "arn:aws:s3:::{{ application_name }}-analytics/*"
+          Condition:
+            StringEquals:
+              "aws:ResourceAccount": "{{ aws_caller.account }}"
+  register: copy_policy
+
+- name: Create IAM Managed Policy for generate manifest for S3 Batch Copy
+  amazon.aws.iam_managed_policy:
+    policy_name: "Manifest-{{ application_name }}-ManagedPolicy"
+    policy_description: "Managed policy for s3 batch copy manifest"
+    policy: "{{ s3_batch_copy_manifest_policy | to_json }}"
+    state: present
+  vars:
+    s3_batch_copy_manifest_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Action:
+            - s3:GetReplicationConfiguration
+            - s3:PutInventoryConfiguration
+          Resource:
+            - "arn:aws:s3:::{{ application_name }}-ingress"
+          Condition:
+            StringEquals:
+              "aws:ResourceAccount": "{{ aws_caller.account }}"
+  register: manifest_policy
+
+- name: Create IAM Managed Policy for kms permissions for S3 Batch Copy
+  amazon.aws.iam_managed_policy:
+    policy_name: "KMS-{{ application_name }}-ManagedPolicy"
+    policy_description: "Managed policy for kms permissions for s3 batch copy"
+    policy: "{{ s3_batch_copy_kms_policy | to_json }}"
+    state: present
+  vars:
+    s3_batch_copy_kms_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Sid: KMSPermissions
+          Action:
+            - kms:Decrypt
+            - kms:GenerateDataKey
+          Resource:
+            - "*"
+          Condition:
+            StringLike:
+              "kms:ViaService": "s3.{{ aws_region }}.amazonaws.com"
+              "kms:EncryptionContext:aws:s3:arn":
+                - "arn:aws:s3:::{{ application_name }}-ingress"
+                - "arn:aws:s3:::{{ application_name }}-ingress/*"
+                - "arn:aws:s3:::{{ application_name }}-analytics"
+                - "arn:aws:s3:::{{ application_name }}-analytics/*"
+  register: kms_policy
+
+````
+
+The following task creates the IAM role used by the s3 batch operations copy job.
+
+**Note:** This role contains an inline policy allowing the `batchoperations` service permissions to assume this role.
+**Note:** This role includes the managed policies defined earlier.
+
+````yaml
+- name: Create role for s3 copy operation
+  amazon.aws.iam_role:
+    name: S3BatchCopyRole
+    assume_role_policy_document:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: batchoperations.s3.amazonaws.com
+          Action: sts:AssumeRole
+    managed_policies:
+      - "{{ copy_policy.policy.arn }}"
+      - "{{ manifest_policy.policy.arn }}"
+      - "{{ kms_policy.policy.arn }}"
+    state: present
+  register: copy_role
+
+````
+
+The following Python script located at `files/lambda/handlercopy.py` executes the `s3control.create_job` operation 
+to create the s3 batch operations copy job to copy the contents of the Ingress bucket to the Analytics bucket.
+
+**Note:** Environment variables are created for the account id, the `copy_role` created earlier, the arn of the Ingress bucket and 
+the arn of the Analytics bucket.
+
+**Note:** The `ConfirmationRequired` property is set to `False`. This means that the copy operation job will execute as soon as the job is ready.
+
+**Note:** The copy operation requires a manifest that defines what objects to copy. This script uses the `ManifestGenerator`
+which generates the manifest based on defined filters. The configuration in this script will copy all the objects in the 
+Ingress bucket to the Analytics bucket since no filter is defined.
+
+**Note:** No job report is created.
+
+**Note:** The `RoleArn` property defines role use for the copy operation.
+
+````
+import boto3
+import os
+
+# S3Control is used for Batch Operations
+s3_control = boto3.client('s3control')
+
+# Configuration parameters
+ACCOUNT_ID = os.environ['AWS_ACCOUNT_ID']
+COPY_ROLE_ARN = os.environ['COPY_ROLE_ARN']
+DEST_BUCKET_ARN = os.environ['DEST_BUCKET_ARN']
+SOURCE_BUCKET_ARN = os.environ['SOURCE_BUCKET_ARN']
+
+def create_copy_job(event, context):
+    s3_control.create_job(
+        AccountId=ACCOUNT_ID,
+        ConfirmationRequired=False,
+        Operation={
+            'S3PutObjectCopy': {
+                'TargetResource': DEST_BUCKET_ARN,
+                'StorageClass': 'STANDARD',
+                'MetadataDirective': 'COPY'
+            }
+        },
+        ManifestGenerator={
+            'S3JobManifestGenerator': {
+                'EnableManifestOutput': False,
+                'SourceBucket': SOURCE_BUCKET_ARN
+            }
+        },
+        Report={
+            'Enabled': False
+        },
+        Priority=10,
+        RoleArn=COPY_ROLE_ARN
+    )
+
+````
+
+The following task zip the above script into `/tmp/s3-copy-lambda.zip` 
+
+````yaml
+- name: Package Lambda
+  community.general.archive:
+    path: "{{ role_path }}/files/lambda/handlercopy.py"
+    dest: /tmp/s3-copy-lambda.zip
+    format: zip
+  when: not ansible_check_mode
+
+````
+
+
+
+
+
 
 ## Execution environment (container image)
 
