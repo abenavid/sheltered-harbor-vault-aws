@@ -334,20 +334,20 @@ With the creation of the new plan, all that remains is to allocate a resource fo
 
 ### Provisioning Ingress and Analytics Zones
 
-According to the Sheltered Harbor standard the Ingress zone is the raw data from the input source is first copied and stored in this zone. 
+According to the Sheltered Harbor standard the `Ingress` zone is the raw data from the input source that is first copied and stored in this zone. 
 This zone contains different ways of sourcing data and storing it in an encrypted S3 bucket with the right security controls using IAM. 
 This zone is ephemeral in nature so as to provide a digital air gap to the vault architecture.
 
-According to the Sheltered Harbor standard the Analytics zone is the raw data must be analyzed to make sure that the corrupt data isn’t transmitted 
-to the cyber vault. You can use services such as Macie to identify corrupt data, or write your own custom logic using AWS Lambda functions.
+According to the Sheltered Harbor standard the `Analytics` zone is the raw data that must be analyzed to make sure that the corrupt data isn’t transmitted 
+to the vault. You can use services such as Macie to identify corrupt data, or write your own custom logic using AWS Lambda functions.
 
 The `ingress_analytics_zones` role provisions s3 buckets for the ingress and analytics zones and creates policies/roles for creating the
-s3 batch operation to copy contents of ingress bucket to analytics bucket on a configured schedule triggered by a cloudwatch event that 
+s3 batch operation to copy the contents of the ingress bucket to the analytics bucket on a configured schedule triggered by a cloudwatch event that 
 triggers the execution of the lambda function that creates the s3 operations batch job.
 
 The following details the tasks performed by the `ingress_analytics_zones` role.
 
-The following tasks create the s3 buckets for the Ingress and Analytics zones.
+The following tasks create the s3 buckets for the `Ingress` and `Analytics` zones.
 
 ````yaml
 - name: Create Ingress bucket
@@ -511,7 +511,8 @@ The following tasks create the managed policies required by the role used to run
 
 The following task creates the IAM role used by the s3 batch operations copy job.
 
-**Note:** This role contains an inline policy allowing the `batchoperations` service permissions to assume this role.
+**Note:** This role contains an inline policy allowing the `batchoperations` service permissions to assume this role. 
+
 **Note:** This role includes the managed policies defined earlier.
 
 ````yaml
@@ -535,20 +536,20 @@ The following task creates the IAM role used by the s3 batch operations copy job
 ````
 
 The following Python script located at `files/lambda/handlercopy.py` executes the `s3control.create_job` operation 
-to create the s3 batch operations copy job to copy the contents of the Ingress bucket to the Analytics bucket.
+to create the s3 batch operations copy job to copy the contents of the `Ingress` bucket to the `Analytics` bucket.
 
-**Note:** Environment variables are created for the account id, the `copy_role` created earlier, the arn of the Ingress bucket and 
-the arn of the Analytics bucket.
+**Note:** Environment variables are created for the account id, the `copy_role` created earlier, the arn of the `Ingress` bucket and 
+the arn of the `Analytics` bucket.
 
 **Note:** The `ConfirmationRequired` property is set to `False`. This means that the copy operation job will execute as soon as the job is ready.
 
 **Note:** The copy operation requires a manifest that defines what objects to copy. This script uses the `ManifestGenerator`
 which generates the manifest based on defined filters. The configuration in this script will copy all the objects in the 
-Ingress bucket to the Analytics bucket since no filter is defined.
+`Ingress` bucket to the `Analytics` bucket since no filter is defined.
 
 **Note:** No job report is created.
 
-**Note:** The `RoleArn` property defines role use for the copy operation.
+**Note:** The `RoleArn` property defines role used for the copy operation.
 
 ````
 import boto3
@@ -589,7 +590,7 @@ def create_copy_job(event, context):
 
 ````
 
-The following task zip the above script into `/tmp/s3-copy-lambda.zip` 
+The following task zips the above script into `/tmp/s3-copy-lambda.zip` 
 
 ````yaml
 - name: Package Lambda
@@ -601,10 +602,143 @@ The following task zip the above script into `/tmp/s3-copy-lambda.zip`
 
 ````
 
+The following tasks create the execution role for the lambda function and the inline policy needed for the lamda function
+to execute the `CreateJob` operation.
+
+````yaml
+- name: Lambda execution role
+  amazon.aws.iam_role:
+    name: S3CopyLambdaRole
+    assume_role_policy_document:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+    managed_policies:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    state: present
+  register: lambda_exec_role
+
+- name: Inline policy for Lambda to call CreateJob operation
+  amazon.aws.iam_policy:
+    iam_type: role
+    iam_name: S3CopyLambdaRole
+    policy_name: CreateS3CopyJobPolicy
+    policy_json: "{{ s3_copy_lambda_policy | to_json }}"
+    state: present
+  when: not ansible_check_mode
+  vars:
+    s3_copy_lambda_policy:
+      Version: "2012-10-17"
+      Statement:
+        - Effect: Allow
+          Action:
+            - s3:CreateJob
+            - s3:DescribeJob
+            - s3:UpdateJobStatus
+            - s3:UpdateJobPriority
+          Resource: "arn:aws:s3:{{ aws_region }}:{{ aws_caller.account }}:job/*"
+        - Effect: Allow
+          Action:
+            - iam:PassRole
+            - iam:GetRole
+          Resource: "{{ copy_role.iam_role.arn }}"
+
+````
+
+The following task creates the lambda function in the AWS environment.
+
+**Note:**  `handler` references the function in the Python script that will be executed.
+
+**Note:** `role` references the execution role defined earlier.
+
+**Note:** `zip_file` references the zip containing the Python script.
+
+**Note:** `memory_size` is the amount of memory reserved to execute the lambda function.
+
+**Note:** `environment_variables` sets the environment variables used by the Python script.
+
+````yaml
+- name: Create S3 batch job Lambda function
+  amazon.aws.lambda:
+    name: CreateS3CopyJob
+    runtime: python3.12
+    handler: handlercopy.create_copy_job
+    role: "{{ lambda_exec_role.iam_role.arn }}"
+    zip_file: /tmp/s3-copy-lambda.zip
+    timeout: 60
+    memory_size: 128
+    environment_variables:
+      AWS_ACCOUNT_ID: "{{ aws_caller.account }}"
+      COPY_ROLE_ARN: "{{ copy_role.iam_role.arn }}"
+      SOURCE_BUCKET_ARN: "arn:aws:s3:::{{ application_name }}-ingress"
+      DEST_BUCKET_ARN: "arn:aws:s3:::{{ application_name }}-analytics"
+    region: "{{ aws_region }}"
+    state: present
+  register: s3_create_copy_job_lambda
+  when: not ansible_check_mode
+
+````
+
+Due to lambda function versioning, it is necessary to create a lambda alias that points to the latest version of the lambda function.
+We will then create the event triggers to execute the lambda function associated with the lambda alias. 
+The following task creates the lambda alias.
+
+**Note:** The `name` can be whatever is desired. Select a value that makes sense for your use case.
 
 
+````yaml
+- name: Create lambda function alias
+  amazon.aws.lambda_alias:
+    function_name: CreateS3CopyJob
+    name: test
+    function_version: "{{ s3_create_copy_job_lambda.configuration.version | int }}"
+    region: "{{ aws_region }}"
+    state: present
+  register: lambda_function_alias
+
+````
+
+The following task creates the cloudwatch event rule that will invoke the lambda function on the cron schedule defined by 
+the `schedule_expression` property.
+
+**Note:** The value of the `schedule_expression` property is set to the value of the `create_copy_job_cron` variable 
+defined in `defaults/main.yml`. The `create_copy_job_cron` variable is currently set to `"cron(0,30 * * * ? *)"`.
+This schedule will execute the version of the lambda function associated with the lambda alias at the top and bottom of every hour (i.e. every 30 minutes).
 
 
+````yaml
+- name: EventBridge rule — create copy job
+  amazon.aws.cloudwatchevent_rule:
+    name: "create-copy-job-rule-{{ application_name }}"
+    schedule_expression: "{{ create_copy_job_cron }}"
+    state: present
+    region: "{{ aws_region }}"
+    targets:
+      - id: CreateCopyJob
+        arn: "{{ lambda_function_alias.alias_arn }}"
+  register: rule_create_copy_job
+  when: not ansible_check_mode
+
+````
+
+Finally, the following task creates a lambda policy to allow the above event rule to invoke the version of the lambda function associated with the lambda alias. 
+
+````yaml
+- name: Allow EventBridge to invoke Lambda (create copy job rule)
+  amazon.aws.lambda_policy:
+    state: present
+    function_name: CreateS3CopyJob
+    alias: test
+    action: lambda:InvokeFunction
+    principal: events.amazonaws.com
+    statement_id: create-copy-job-execute
+    source_arn: "{{ rule_create_copy_job.rule.arn }}"
+  when: not ansible_check_mode
+
+````
 
 ## Execution environment (container image)
 
